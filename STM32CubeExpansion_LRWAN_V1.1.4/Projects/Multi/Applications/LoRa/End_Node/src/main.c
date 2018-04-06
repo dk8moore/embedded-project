@@ -55,6 +55,9 @@
 #include "vcom.h"
 #include "version.h"
 #include "adc.h"
+#include "stm32l0xx_hal.h"
+#include "i2c.h"
+#include "bmp280.h"
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
@@ -166,6 +169,13 @@ static  LoRaParam_t LoRaParamInit= {LORAWAN_ADR_STATE,
                                     LORAWAN_PUBLIC_NETWORK,
                                     JOINREQ_NBTRIALS};
 
+
+BMP280_HandleTypedef bmp280;
+//uint16_t size;  // for the serial com of the correct init of the i2c
+//uint8_t Data[256]; // " " "
+float pres, temp, hum;
+
+
 /* Private functions ---------------------------------------------------------*/
 
 /**
@@ -190,6 +200,23 @@ int main( void )
   HW_Init( );
   
   /* USER CODE BEGIN 1 */
+  MX_I2C1_Init();
+
+  bmp280_init_default_params(&bmp280.params);
+  bmp280.addr = BMP280_I2C_ADDRESS_0;
+  bmp280.i2c = &hi2c1;
+/*
+  while (!bmp280_init(&bmp280, &bmp280.params)) {
+  	size = sprintf((char *)Data, "BMP280 initialization failed\n");
+  	HAL_UART_Transmit(&huart1, Data, size, 1000);
+  	HAL_Delay(2000);
+  }
+*/
+  bool bme280p = bmp280.id == BME280_CHIP_ID;
+  //size = sprintf((char *)Data, "BMP280: found %s\n", bme280p ? "BME280" : "BMP280");
+  //HAL_UART_Transmit(&huart1, Data, size, 1000);
+
+
   /* USER CODE END 1 */
   
   /*Disbale Stand-by mode*/
@@ -222,6 +249,31 @@ int main( void )
     char str_gas[10];
     sprintf(str_gas,"gas: %d  ",(int)gas);
     PRINTF(str_gas);
+
+    char str_bme[80];
+    //HAL_Delay(100);
+	while (!bmp280_read_float(&bmp280, &temp, &pres, &hum)) {
+		//size = sprintf((char *)Data,"Temperature/pressure reading failed\n");
+		//HAL_UART_Transmit(&huart1, Data, size, 1000);
+		PRINTF("BMP280 reading failed\n");
+		HAL_Delay(1000);
+	}
+
+	sprintf(str_bme,"Pressure: %.2f Pa, Temperature: %.2f C", pres, temp); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
+	//size = sprintf((char *)Data,"Pressure: %.2f Pa, Temperature: %.2f C",pressure, temperature);
+	//HAL_UART_Transmit(&huart1, Data, size, 1000);
+	if (bme280p) {
+		sprintf(str_bme,", Humidity: %.2f\n", hum);
+		//size = sprintf((char *)Data,", Humidity: %.2f\n", humidity);
+		//HAL_UART_Transmit(&huart1, Data, size, 1000);
+	}
+	else {
+		sprintf(str_bme,"\n");
+		//size = sprintf((char *)Data, "\n");
+		//HAL_UART_Transmit(&huart1, Data, size, 1000);
+	}
+	PRINTF(str_bme);
+	//HAL_Delay(2000);
 
     /* USER CODE END 2 */
   }
@@ -464,6 +516,21 @@ static void LORA_ConfirmClass ( DeviceClass_t Class )
   
   LORA_send( &AppData, LORAWAN_UNCONFIRMED_MSG);
 }
+
+/**
+ * @brief  This function is executed in case of error occurrence.
+ * @param  file: The file name as string.
+ * @param  line: The line in file as a number.
+ * @retval None
+ */
+void _Error_Handler(char *file, int line) {
+	/* USER CODE BEGIN Error_Handler_Debug */
+	/* User can add his own implementation to report the HAL error return state */
+	while (1) {
+	}
+	/* USER CODE END Error_Handler_Debug */
+}
+
 
 #ifdef USE_B_L072Z_LRWAN1
 static void OnTimerLedEvent( void )

@@ -53,6 +53,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../../Drivers/BSP/B-L072Z-LRWAN1"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../../Middlewares/Third_Party/Lora/Mac/region"/>
 									<listOptionValue builtIn="false" value="&quot;/Users/dk8moore/Desktop/Embedded Project/External Libraries&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;/Users/dk8moore/Desktop/embedded-project/External Libraries&quot;"/>
 								</option>
 								<option id="gnu.c.compiler.option.preprocessor.def.symbols.1636441418" name="Defined symbols (-D)" superClass="gnu.c.compiler.option.preprocessor.def.symbols" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="STM32L072xx"/>
@@ -72,7 +73,7 @@
 								<option id="fr.ac6.managedbuild.tool.gnu.cross.c.linker.script.1180559910" name="Linker Script (-T)" superClass="fr.ac6.managedbuild.tool.gnu.cross.c.linker.script" value="../STM32L072CZYx_FLASH.ld" valueType="string"/>
 								<option id="gnu.c.link.option.libs.140142243" name="Libraries (-l)" superClass="gnu.c.link.option.libs"/>
 								<option id="gnu.c.link.option.paths.1511133579" name="Library search path (-L)" superClass="gnu.c.link.option.paths"/>
-								<option id="gnu.c.link.option.ldflags.1965584719" name="Linker flags" superClass="gnu.c.link.option.ldflags" value="-specs=nosys.specs -specs=nano.specs" valueType="string"/>
+								<option id="gnu.c.link.option.ldflags.1965584719" name="Linker flags" superClass="gnu.c.link.option.ldflags" useByScannerDiscovery="false" value="-specs=nosys.specs -specs=nano.specs -u _printf_float" valueType="string"/>
 								<inputType id="cdt.managedbuild.tool.gnu.c.linker.input.1895618900" superClass="cdt.managedbuild.tool.gnu.c.linker.input">
 									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
 									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
@@ -88,7 +89,8 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="Drivers/BSP/X_NUCLEO_IKS01A1" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="Projects/End_Node|Drivers/BSP/X_NUCLEO_IKS01A1" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="Projects/End_Node"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -110,7 +112,7 @@
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="refreshScope" versionNumber="2">
 		<configuration configurationName="Debug">
-			<resource resourceType="PROJECT" workspacePath="mlm32l07x01"/>
+			<resource resourceType="PROJECT" workspacePath="/mlm32l07x01"/>
 		</configuration>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
