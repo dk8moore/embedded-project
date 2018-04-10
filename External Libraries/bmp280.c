@@ -28,6 +28,7 @@
 
 #include "bmp280.h"
 #include <stdio.h>
+#include "vcom.h"
 
 /**
  * BMP280 registers
@@ -76,14 +77,12 @@ static bool read_register16(BMP280_HandleTypedef *dev, uint8_t addr, uint16_t *v
 
 }
 
-static inline int read_data(BMP280_HandleTypedef *dev, uint8_t addr, uint8_t *value,
-		uint8_t len) {
+static inline int read_data(BMP280_HandleTypedef *dev, uint8_t addr, uint8_t *value, uint8_t len) {
 	uint16_t tx_buff;
 	tx_buff = (dev->addr << 1);
 	if (HAL_I2C_Mem_Read(dev->i2c, tx_buff, addr, 1, value, len, 5000) == HAL_OK)
 		return 0;
-	else
-		return 1;
+	else return 1;
 
 }
 
@@ -140,8 +139,7 @@ static int write_register8(BMP280_HandleTypedef *dev, uint8_t addr, uint8_t valu
 
 bool bmp280_init(BMP280_HandleTypedef *dev, bmp280_params_t *params) {
 
-	if (dev->addr != BMP280_I2C_ADDRESS_0
-			&& dev->addr != BMP280_I2C_ADDRESS_1) {
+	if (dev->addr != BMP280_I2C_ADDRESS_0 && dev->addr != BMP280_I2C_ADDRESS_1) {
 
 		return false;
 	}
@@ -298,8 +296,8 @@ static inline uint32_t compensate_humidity(BMP280_HandleTypedef *dev, int32_t ad
 	return v_x1_u32r >> 12;
 }
 
-bool bmp280_read_fixed(BMP280_HandleTypedef *dev, int32_t *temperature, uint32_t *pressure,
-		uint32_t *humidity) {
+bool bmp280_read_fixed(BMP280_HandleTypedef *dev, int32_t *temperature, uint32_t *pressure, uint32_t *humidity)
+{
 	int32_t adc_pressure;
 	int32_t adc_temp;
 	uint8_t data[8];
@@ -337,8 +335,8 @@ bool bmp280_read_float(BMP280_HandleTypedef *dev, float *temperature, float *pre
 	int32_t fixed_temperature;
 	uint32_t fixed_pressure;
 	uint32_t fixed_humidity;
-	if (bmp280_read_fixed(dev, &fixed_temperature, &fixed_pressure,
-			humidity ? &fixed_humidity : NULL)) {
+	if (bmp280_read_fixed(dev, &fixed_temperature, &fixed_pressure, humidity ? &fixed_humidity : NULL))
+	{
 		*temperature = (float) fixed_temperature / 100;
 		*pressure = (float) fixed_pressure / 256;
 		if (humidity)

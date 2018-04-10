@@ -75,7 +75,7 @@
 /*!
  * Defines the application data transmission duty cycle. 5s, value in [ms].
  */
-#define APP_TX_DUTYCYCLE                            5000
+#define APP_TX_DUTYCYCLE                            3000
 /*!
  * LoRaWAN Adaptive Data Rate
  * @note Please note that when ADR is enabled the end-device should be static
@@ -185,6 +185,7 @@ float pres, temp, hum;
   */
 int main( void )
 {
+
   u_int16_t gas = 0;
 
   /* STM32 HAL library initialisation*/
@@ -205,17 +206,17 @@ int main( void )
   bmp280_init_default_params(&bmp280.params);
   bmp280.addr = BMP280_I2C_ADDRESS_0;
   bmp280.i2c = &hi2c1;
-/*
+
   while (!bmp280_init(&bmp280, &bmp280.params)) {
-  	size = sprintf((char *)Data, "BMP280 initialization failed\n");
-  	HAL_UART_Transmit(&huart1, Data, size, 1000);
-  	HAL_Delay(2000);
+	  PRINTF("BMP280 initialization failed!\n\r");
   }
-*/
+
   bool bme280p = bmp280.id == BME280_CHIP_ID;
   //size = sprintf((char *)Data, "BMP280: found %s\n", bme280p ? "BME280" : "BMP280");
   //HAL_UART_Transmit(&huart1, Data, size, 1000);
-
+  char prova[50];
+  sprintf(prova, "\n\rEnviromental sensor: found %s\n\r",bme280p ? "BME280" : "BMP280");
+  PRINTF(prova);
 
   /* USER CODE END 1 */
   
@@ -245,37 +246,34 @@ int main( void )
     
     /* USER CODE BEGIN 2 */
 
-    gas = getAnalogSensorValue(0); //uses adc.c -> initialize Adc then read Adc value then de-init Adc [ON PIN ADC_IN0]
-    char str_gas[10];
-    sprintf(str_gas,"gas: %d  ",(int)gas);
-    PRINTF(str_gas);
+	gas = getAnalogSensorValue(0); //uses adc.c -> initialize Adc then read Adc value then de-init Adc [ON PIN ADC_IN0]
+	char str_gas[10];
+	sprintf(str_gas,"Gas: %d, ",(int)gas);
+	PRINTF(str_gas);
 
-    char str_bme[80];
-    //HAL_Delay(100);
+	char str_pre[15];
+	char str_tem[15];
+	char str_hum[15];
+
 	while (!bmp280_read_float(&bmp280, &temp, &pres, &hum)) {
-		//size = sprintf((char *)Data,"Temperature/pressure reading failed\n");
-		//HAL_UART_Transmit(&huart1, Data, size, 1000);
-		PRINTF("BMP280 reading failed\n");
+		PRINTF("BMP280 reading failed\n\r");
 		HAL_Delay(1000);
 	}
 
-	sprintf(str_bme,"Pressure: %.2f Pa, Temperature: %.2f C", pres, temp); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
-	//size = sprintf((char *)Data,"Pressure: %.2f Pa, Temperature: %.2f C",pressure, temperature);
-	//HAL_UART_Transmit(&huart1, Data, size, 1000);
+	sprintf(str_pre,"P: %.2f Pa, ", pres); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
+	PRINTF(str_pre);
+	sprintf(str_tem,"T: %.2f C", temp);
+	PRINTF(str_tem);
 	if (bme280p) {
-		sprintf(str_bme,", Humidity: %.2f\n", hum);
-		//size = sprintf((char *)Data,", Humidity: %.2f\n", humidity);
-		//HAL_UART_Transmit(&huart1, Data, size, 1000);
+		sprintf(str_hum,", H: %.2f\n\r", hum);
 	}
 	else {
-		sprintf(str_bme,"\n");
-		//size = sprintf((char *)Data, "\n");
-		//HAL_UART_Transmit(&huart1, Data, size, 1000);
+		sprintf(str_hum,"\n\r");
 	}
-	PRINTF(str_bme);
-	//HAL_Delay(2000);
+	PRINTF(str_hum);
 
-    /* USER CODE END 2 */
+	/* USER CODE END 2 */
+
   }
 }
 
