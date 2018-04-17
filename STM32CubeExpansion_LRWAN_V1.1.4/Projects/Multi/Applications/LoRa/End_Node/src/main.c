@@ -58,6 +58,7 @@
 #include "stm32l0xx_hal.h"
 #include "i2c.h"
 #include "bmp280.h"
+#include "tsl2561.h"
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
@@ -171,10 +172,16 @@ static  LoRaParam_t LoRaParamInit= {LORAWAN_ADR_STATE,
 
 
 BMP280_HandleTypedef bmp280;
-//uint16_t size;  // for the serial com of the correct init of the i2c
-//uint8_t Data[256]; // " " "
+TSL2561_HandleTypedef tsl2561;
+u_int16_t gas;
 float pres, temp, hum;
-
+unsigned long lux;
+char str_gas[10]; // string for output on st-link the gas sensor read-out
+char str_pre[15]; // string for output on st-link the pressure sensor read-out
+char str_tem[15]; // string for output on st-link the temperature sensor read-out
+char str_hum[15]; // string for output on st-link the humidity sensor read-out
+char env_sen[50]; // string for output on st-link the type of environmental sensor connected
+char lux_sen[50]; // string for output on st-link the type of light sensor connected
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -183,98 +190,106 @@ float pres, temp, hum;
   * @param  None
   * @retval None
   */
-int main( void )
+int main(void)
 {
+	// SYSTEM INITIALIZATION
 
-  u_int16_t gas = 0;
+	/* STM32 HAL library initialisation*/
+	HAL_Init();
 
-  /* STM32 HAL library initialisation*/
-  HAL_Init( );
-  
-  /* Configure the system clock*/
-  SystemClock_Config( );
-  
-  /* Configure the debug mode*/
-  DBG_Init( );
-  
-  /* Configure the hardware*/
-  HW_Init( );
-  
-  /* USER CODE BEGIN 1 */
-  MX_I2C1_Init();
+	/* Configure the system clock*/
+	SystemClock_Config();
 
-  bmp280_init_default_params(&bmp280.params);
-  bmp280.addr = BMP280_I2C_ADDRESS_0;
-  bmp280.i2c = &hi2c1;
+	/* Configure the debug mode*/
+	DBG_Init();
 
-  while (!bmp280_init(&bmp280, &bmp280.params)) {
-	  PRINTF("BMP280 initialization failed!\n\r");
-  }
+	/* Configure the hardware*/
+	HW_Init();
 
-  bool bme280p = bmp280.id == BME280_CHIP_ID;
-  //size = sprintf((char *)Data, "BMP280: found %s\n", bme280p ? "BME280" : "BMP280");
-  //HAL_UART_Transmit(&huart1, Data, size, 1000);
-  char prova[50];
-  sprintf(prova, "\n\rEnviromental sensor: found %s\n\r",bme280p ? "BME280" : "BMP280");
-  PRINTF(prova);
+	/*Disable Stand-by mode*/
+	LPM_SetOffMode(LPM_APPLI_Id, LPM_Disable);
 
-  /* USER CODE END 1 */
-  
-  /*Disbale Stand-by mode*/
-  LPM_SetOffMode(LPM_APPLI_Id , LPM_Disable );
-  
-  /* Configure the Lora Stack*/
-  LORA_Init( &LoRaMainCallbacks, &LoRaParamInit);
-  
-  PRINTF("VERSION: %X\n\r", VERSION);
-  
-  LORA_Join( );
-  
-  LoraStartTx( TX_ON_TIMER) ;
-  
-  while( 1 )
-  {
-    DISABLE_IRQ( );
-    /* if an interrupt has occurred after DISABLE_IRQ, it is kept pending 
-     * and cortex will not enter low power anyway  */
+	/* Configure the Lora Stack*/
+	LORA_Init(&LoRaMainCallbacks, &LoRaParamInit);
+	PRINTF("VERSION: %X\n\r", VERSION);
 
-#ifndef LOW_POWER_DISABLE
-    LPM_EnterLowPower( );
-#endif
+	/* Join the LORA network */
+	LORA_Join();
 
-    ENABLE_IRQ();
-    
-    /* USER CODE BEGIN 2 */
+	/* Start a timer to trasmit data on LORA network */
+	LoraStartTx(TX_ON_TIMER);
 
-	gas = getAnalogSensorValue(0); //uses adc.c -> initialize Adc then read Adc value then de-init Adc [ON PIN ADC_IN0]
-	char str_gas[10];
-	sprintf(str_gas,"Gas: %d, ",(int)gas);
-	PRINTF(str_gas);
+	//BMP280 INITIALIZATION
 
-	char str_pre[15];
-	char str_tem[15];
-	char str_hum[15];
+	/* I2C1 bus initialization */
+	MX_I2C1_Init();
 
-	while (!bmp280_read_float(&bmp280, &temp, &pres, &hum)) {
-		PRINTF("BMP280 reading failed\n\r");
-		HAL_Delay(1000);
+	/* BMP280 I2C initialization */
+	bmp280_init_default_params(&bmp280.params);
+	bmp280.addr = BMP280_I2C_ADDRESS_0; //0x76 address (BME280 SDO pin at GND)
+	bmp280.i2c = &hi2c1;
+	while (!bmp280_init(&bmp280, &bmp280.params)) {
+		PRINTF("BMP280 initialization failed!\n\r");
 	}
 
-	sprintf(str_pre,"P: %.2f Pa, ", pres); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
-	PRINTF(str_pre);
-	sprintf(str_tem,"T: %.2f C", temp);
-	PRINTF(str_tem);
-	if (bme280p) {
-		sprintf(str_hum,", H: %.2f\n\r", hum);
-	}
-	else {
-		sprintf(str_hum,"\n\r");
-	}
-	PRINTF(str_hum);
+	/* Check ID of BMP280 */
+	bool bme280p = bmp280.id == BME280_CHIP_ID; //0x60 value (BME280, temperature+pressure+humidity)
+	sprintf(env_sen, "Enviromental sensor found: %s\n\r",bme280p ? "BME280" : "BMP280");
+	PRINTF(env_sen);
 
-	/* USER CODE END 2 */
+	//TSL2561 INITIALIZATION
 
-  }
+	/* TSL2561 I2C initialization */
+	tsl2561.addr = TSL2561_I2C_ADDRESS_1; //0x39 address (TSL251 ADDR SEL pin left FLOATING)
+	tsl2561.i2c = &hi2c1;
+	while (!tsl2561_init(&tsl2561)) {
+		PRINTF("TSL2561 initialization failed!\n\r");
+	}
+
+	/* Check ID of TSL2561 */
+	bool tsl2561p = ((tsl2561.id && 0xF0) >> 4) == TSL2561_CHIP_ID; //0x1 value (TSL2561)
+	sprintf(lux_sen, "Light sensor found: %s\n\r",tsl2561p ? "TSL2561" : "TSL2560");
+	PRINTF(lux_sen);
+
+	while(1)
+	{
+		DISABLE_IRQ( );
+		/* if an interrupt has occurred after DISABLE_IRQ, it is kept pending
+		 * and cortex will not enter low power anyway  */
+
+		#ifndef LOW_POWER_DISABLE
+			LPM_EnterLowPower( );
+		#endif
+
+		ENABLE_IRQ();
+
+		/* ENVIRONMENTAL SENSOR BMx280 READ OPERATIONS */
+		if(!bmp280_read_float(&bmp280, &temp, &pres, &hum)) {  //uses bmp280.h
+			PRINTF("BMx280 reading failed!\n\r");
+		}
+		else {
+			sprintf(str_pre,"P: %.2f Pa, ", pres); 							// NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
+			PRINTF(str_pre);
+			sprintf(str_tem,"T: %.2f C", temp);
+			PRINTF(str_tem);
+			if (bme280p) {
+				sprintf(str_hum,", H: %.2f\n\r", hum);
+			}
+			else {
+				sprintf(str_hum,"\n\r");
+			}
+			PRINTF(str_hum);
+		}
+
+		/* GAS SENSOR (ADC) READ OPERATIONS */
+		gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
+		sprintf(str_gas,"G: %d, ",(int)gas);
+		PRINTF(str_gas);
+
+		/* LIGHT SENSOR TSL2561 READ OPERATIONS */
+		lux = tsl2561_read_intensity(&tsl2561);
+
+	}
 }
 
 static void LORA_HasJoined( void )
