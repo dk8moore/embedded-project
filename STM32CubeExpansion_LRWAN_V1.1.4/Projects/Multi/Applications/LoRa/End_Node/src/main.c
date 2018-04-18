@@ -249,26 +249,25 @@ int main(void)
 
 	/* Check ID of TSL2561 */
 	bool tsl2561p = ((tsl2561.id && 0xF0) >> 4) == TSL2561_CHIP_ID; //0x01 value (TSL2561)
-	char tsl_chip[10];
-	sprintf(tsl_chip, "%02x\n\r", tsl2561.id);
-	PRINTF(tsl_chip);
+	//char tsl_chip[10];
+	//sprintf(tsl_chip, "%02x\n\r", tsl2561.id);
+	//PRINTF(tsl_chip);
 	sprintf(lux_sen, "Light sensor found: %s\n\r",tsl2561p ? "TSL2561" : "TSL2560");
 	PRINTF(lux_sen);
 
 	while(1)
 	{
-		DISABLE_IRQ( );
-		/* if an interrupt has occurred after DISABLE_IRQ, it is kept pending
-		 * and cortex will not enter low power anyway  */
+		/*DISABLE_IRQ( );
+		// if an interrupt has occurred after DISABLE_IRQ, it is kept pending
+		// and cortex will not enter low power anyway
 
 		#ifndef LOW_POWER_DISABLE
 			LPM_EnterLowPower( );
 		#endif
 
 		ENABLE_IRQ();
-
+		*/
 		// SENSORS READING OPERATIONS
-
 		/* ENVIRONMENTAL SENSOR BMx280 READ OPERATIONS */
 		if(!bmp280_read_float(&bmp280, &temp, &pres, &hum)) {  //uses bmp280.h
 			PRINTF("BMx280 reading failed!\n\r");
@@ -276,22 +275,22 @@ int main(void)
 		else {
 			sprintf(str_pre,"P: %.2f Pa, ", pres); 	// NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
 			PRINTF(str_pre);
-			sprintf(str_tem,"T: %.2f C, ", temp);
+			sprintf(str_tem,"T: %.2f °C, ", temp);
 			PRINTF(str_tem);
 			if (bme280p) {
-				sprintf(str_hum,"H: %.2f, ", hum);
+				sprintf(str_hum,"H: %.2f %%%%, ", hum);
 			}
 			PRINTF(str_hum);
 		}
 
 		/* GAS SENSOR (ADC) READ OPERATIONS */
 		gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
-		sprintf(str_gas,"G: %d %%, ",(int)gas);
+		sprintf(str_gas,"G: %d ppm, ",(int)gas);
 		PRINTF(str_gas);
 
 		/* LIGHT SENSOR TSL2561 READ OPERATIONS */
 		lux = tsl2561_read_intensity(&tsl2561);
-		sprintf(str_lux,"L: %lu\n\r", lux);
+		sprintf(str_lux,"L: %lu lx\n\r", lux);
 		PRINTF(str_lux);
 
 	}
