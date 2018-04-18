@@ -183,6 +183,7 @@ char str_hum[15]; // string for output on st-link the humidity sensor read-out
 char str_lux[15]; // string for output on st-link the light sensor read-out
 char env_sen[50]; // string for output on st-link the type of environmental sensor connected
 char lux_sen[50]; // string for output on st-link the type of light sensor connected
+char str_sen[50];
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -219,6 +220,12 @@ int main(void)
 
 	/* Start a timer to trasmit data on LORA network */
 	LoraStartTx(TX_ON_TIMER);
+
+	pres = 0.0;
+	temp = 0.0;
+	hum = 0.0;
+	gas = 0;
+	lux = 0;
 
 	//BMP280 INITIALIZATION
 
@@ -272,23 +279,22 @@ int main(void)
 		if(!bmp280_read_float(&bmp280, &temp, &pres, &hum)) {  //uses bmp280.h
 			PRINTF("BMx280 reading failed!\n\r");
 		}
-		else {
-			sprintf(str_pre,"P: %.2f Pa, ", pres); 	// NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
-			PRINTF(str_pre);
-			sprintf(str_tem,"T: %.2f °C, ", temp);
-			PRINTF(str_tem);
-			if (bme280p) {
-				sprintf(str_hum,"H: %.2f %%%%, ", hum);
-			}
-			PRINTF(str_hum);
-		}
-
-		/* GAS SENSOR (ADC) READ OPERATIONS */
 		gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
+		/*if (bme280p)
+			sprintf(str_sen,"T: %.2f °C, P: %.2f Pa, H: %.2f %%%%, G: %d ppm, ", temp, pres, hum, (int)gas); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
+			else sprintf(str_sen,"T: %.2f °C, P: %.2f Pa, G: %d ppm, ", temp, pres, (int)gas);
+		PRINTF(str_sen);*/
+
+		sprintf(str_pre,"P: %.2f Pa, ", pres);
+		PRINTF(str_pre);
+		sprintf(str_tem,"T: %.2f °C, ", temp);
+		PRINTF(str_tem);
+		if (bme280p) {
+			sprintf(str_hum,"H: %.2f %%%%, ", hum);
+		}
+		PRINTF(str_hum);
 		sprintf(str_gas,"G: %d ppm, ",(int)gas);
 		PRINTF(str_gas);
-
-		/* LIGHT SENSOR TSL2561 READ OPERATIONS */
 		lux = tsl2561_read_intensity(&tsl2561);
 		sprintf(str_lux,"L: %lu lx\n\r", lux);
 		PRINTF(str_lux);

@@ -39,32 +39,32 @@ static bool read_register8(TSL2561_HandleTypedef *dev, uint8_t addr, uint8_t *va
 	tx_buff = (dev->addr << 1);
 	if (HAL_I2C_Mem_Read(dev->i2c, tx_buff, addr, 1, &rx_buff, 1, 5000) == HAL_OK) {
 		*value = rx_buff;
-		return false;
+		return true;
 	}
-	else return true;
+	else return false;
 
 }
 
 /**
  *
  */
-static int write_register8(TSL2561_HandleTypedef *dev, uint8_t addr, uint8_t value) {
+static bool write_register8(TSL2561_HandleTypedef *dev, uint8_t addr, uint8_t value) {
 	uint16_t tx_buff;
 	tx_buff = (dev->addr << 1);
 	if (HAL_I2C_Mem_Write(dev->i2c, tx_buff, addr, 1, &value, 1, 5000) == HAL_OK)
-		return 0;
-	else return 1;
+		return true;
+	else return false;
 }
 
 /**
  *
  */
-static inline int read_data(TSL2561_HandleTypedef *dev, uint8_t addr, uint8_t *value, uint8_t len) {
+static inline bool read_data(TSL2561_HandleTypedef *dev, uint8_t addr, uint8_t *value, uint8_t len) {
 	uint16_t tx_buff;
 	tx_buff = (dev->addr << 1);
 	if (HAL_I2C_Mem_Read(dev->i2c, tx_buff, addr, 1, value, len, 5000) == HAL_OK)
-		return 0;
-	else return 1;
+		return true;
+	else return false;
 
 }
 
@@ -77,11 +77,11 @@ static uint16_t read_ADC_channel(TSL2561_HandleTypedef *dev, uint8_t low_byte_ad
 	received_data[0] = 0;
 	received_data[1] = 0;
 	uint16_t data = 0;
-	if(read_data(dev, low_byte_addr, &received_data[0], 1))
+	if(!read_data(dev, low_byte_addr, &received_data[0], 1))
 	{
 
 	}
-	if(read_data(dev, high_byte_addr, &received_data[1], 1))
+	if(!read_data(dev, high_byte_addr, &received_data[1], 1))
 	{
 
 	}
@@ -200,20 +200,20 @@ bool tsl2561_init(TSL2561_HandleTypedef *dev)
 		return false;
 	}
 
-	if (write_register8(dev, TSL2561_CTRL, TSL2561_POWER_ON)) {
+	if (!write_register8(dev, TSL2561_CTRL, TSL2561_POWER_ON)) {
 		return false;
 	}
 
 	HAL_Delay(50);
 
-	if (read_register8(dev, TSL2561_REG_ID, &dev->id)) {
+	if (!read_register8(dev, TSL2561_REG_ID, &dev->id)) {
 		return false;
 	}
 
 	//debugging the initialization -> powering on the device
 	/*
 	uint8_t value;
-	if (read_register8(dev, TSL2561_CTRL, &value)) {
+	if (!read_register8(dev, TSL2561_CTRL, &value)) {
 		return false;
 	}
 	if(value == TSL2561_POWER_ON || value == 0x33 || value == 0x13)
@@ -227,13 +227,13 @@ bool tsl2561_init(TSL2561_HandleTypedef *dev)
 	*/
 	//end debug
 
-	if (write_register8(dev, TSL2561_CTRL, TSL2561_POWER_OFF)) {
+	if (!write_register8(dev, TSL2561_CTRL, TSL2561_POWER_OFF)) {
 		return false;
 	}
 
 	//debugging the initialization -> powering off the device
 	/*
-	if (read_register8(dev, TSL2561_CTRL, &value)) {
+	if (!read_register8(dev, TSL2561_CTRL, &value)) {
 			return false;
 	}
 	if(value == TSL2561_POWER_OFF || value == 0x30 || value == 0x10)
