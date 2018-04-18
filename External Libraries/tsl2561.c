@@ -33,12 +33,15 @@
 /**
  *
  */
-static bool read_register8(TSL2561_HandleTypedef *dev, uint8_t addr, uint16_t *value) {
+static bool read_register8(TSL2561_HandleTypedef *dev, uint8_t addr, uint8_t *value) {
 	uint16_t tx_buff;
+	uint8_t rx_buff = 0;
 	tx_buff = (dev->addr << 1);
-	if (HAL_I2C_Mem_Read(dev->i2c, tx_buff, addr, 1, &value, 1, 5000) == HAL_OK)
-		return true;
-	else return false;
+	if (HAL_I2C_Mem_Read(dev->i2c, tx_buff, addr, 1, &rx_buff, 1, 5000) == HAL_OK) {
+		*value = rx_buff;
+		return false;
+	}
+	else return true;
 
 }
 
@@ -74,10 +77,14 @@ static uint16_t read_ADC_channel(TSL2561_HandleTypedef *dev, uint8_t low_byte_ad
 	received_data[0] = 0;
 	received_data[1] = 0;
 	uint16_t data = 0;
+	if(read_data(dev, low_byte_addr, &received_data[0], 1))
+	{
 
-	read_data(dev, low_byte_addr, received_data[0], 1);
-	read_data(dev, high_byte_addr, received_data[1], 1);
+	}
+	if(read_data(dev, high_byte_addr, &received_data[1], 1))
+	{
 
+	}
 	data = (uint16_t) received_data[0];
 	data |= (uint16_t) (received_data[1] << 8);
 
@@ -175,7 +182,7 @@ static unsigned long lux_calculation(unsigned int gain, unsigned int i_time, uns
 		temp = 0;
 
 	// Round the LSB (2^LUX_SCALE-1)
-	temp += (1 << LUX_SCALE-1);
+	temp += (1 << (LUX_SCALE-1));
 
 	// Strip off fractional portion
 	unsigned long lux = temp >> LUX_SCALE;
@@ -188,11 +195,8 @@ static unsigned long lux_calculation(unsigned int gain, unsigned int i_time, uns
  */
 bool tsl2561_init(TSL2561_HandleTypedef *dev)
 {
+	//char ctrl[15];
 	if (dev->addr != TSL2561_I2C_ADDRESS_0 && dev->addr != TSL2561_I2C_ADDRESS_1 && dev->addr != TSL2561_I2C_ADDRESS_2) {
-		return false;
-	}
-
-	if (read_register8(dev, TSL2561_REG_ID, &dev->id)) {
 		return false;
 	}
 
@@ -200,22 +204,48 @@ bool tsl2561_init(TSL2561_HandleTypedef *dev)
 		return false;
 	}
 
+	HAL_Delay(50);
+
+	if (read_register8(dev, TSL2561_REG_ID, &dev->id)) {
+		return false;
+	}
+
 	//debugging the initialization -> powering on the device
+	/*
 	uint8_t value;
-	if (read_register8(dev, TSL2561_CTRL, value)) {
+	if (read_register8(dev, TSL2561_CTRL, &value)) {
 		return false;
 	}
-	if(value==TSL2561_POWER_ON)
-		PRINTF("Device is on!");
+	if(value == TSL2561_POWER_ON || value == 0x33 || value == 0x13)
+		PRINTF("Device is on!\n\r");
 	else {
-		PRINTF("Device is off but should be on!");
+		PRINTF("Device is off but should be on!\n\r");
+		sprintf(ctrl, "%02x\n\r",value);
+		PRINTF(ctrl);
 		return false;
 	}
+	*/
 	//end debug
 
 	if (write_register8(dev, TSL2561_CTRL, TSL2561_POWER_OFF)) {
 		return false;
 	}
+
+	//debugging the initialization -> powering off the device
+	/*
+	if (read_register8(dev, TSL2561_CTRL, &value)) {
+			return false;
+	}
+	if(value == TSL2561_POWER_OFF || value == 0x30 || value == 0x10)
+		PRINTF("Device is off!\n\r");
+	else {
+		PRINTF("Device is on but should be off!\n\r");
+		sprintf(ctrl, "%02x\n\r",value);
+		PRINTF(ctrl);
+		return false;
+	}*/
+	//end debug
+
 	return true;
 }
 
@@ -229,6 +259,7 @@ unsigned long tsl2561_read_intensity(TSL2561_HandleTypedef *dev) {
 
 	// Reading process of the ADC registers
 	write_register8(dev, TSL2561_CTRL, TSL2561_POWER_ON); // power on the device
+	HAL_Delay(500);
 	long ch0 = read_ADC_channel(dev, CHANNEL0_LOW_BYTE_ADDRESS, CHANNEL0_HIGH_BYTE_ADDRESS);
 	long ch1 = read_ADC_channel(dev, CHANNEL1_LOW_BYTE_ADDRESS, CHANNEL1_HIGH_BYTE_ADDRESS);
 	write_register8(dev, TSL2561_CTRL, TSL2561_POWER_OFF); // power off the device

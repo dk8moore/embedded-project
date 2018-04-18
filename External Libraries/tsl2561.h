@@ -22,8 +22,8 @@
 #define TSL2561_I2C_ADDRESS_1 	0x39 // FLOAT on ADDR SEL pin of the sensor
 #define TSL2561_I2C_ADDRESS_2 	0x49 // VDD on ADDR SEL pin of the sensor
 
-#define TSL2560_CHIP_ID		0x0 /* MSByte -> TSL2561 is actually TSL2560 */
-#define TSL2561_CHIP_ID  	0x1 /* MSByte -> TSL2561 */
+#define TSL2560_CHIP_ID		0x00 /* MSByte -> TSL2561 is actually TSL2560 */
+#define TSL2561_CHIP_ID  	0x01 /* MSByte -> TSL2561 */
 
 
 /**

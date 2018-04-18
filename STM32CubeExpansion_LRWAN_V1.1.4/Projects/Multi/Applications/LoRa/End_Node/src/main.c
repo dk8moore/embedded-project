@@ -76,7 +76,7 @@
 /*!
  * Defines the application data transmission duty cycle. 5s, value in [ms].
  */
-#define APP_TX_DUTYCYCLE                            3000
+#define APP_TX_DUTYCYCLE                            4000
 /*!
  * LoRaWAN Adaptive Data Rate
  * @note Please note that when ADR is enabled the end-device should be static
@@ -180,6 +180,7 @@ char str_gas[10]; // string for output on st-link the gas sensor read-out
 char str_pre[15]; // string for output on st-link the pressure sensor read-out
 char str_tem[15]; // string for output on st-link the temperature sensor read-out
 char str_hum[15]; // string for output on st-link the humidity sensor read-out
+char str_lux[15]; // string for output on st-link the light sensor read-out
 char env_sen[50]; // string for output on st-link the type of environmental sensor connected
 char lux_sen[50]; // string for output on st-link the type of light sensor connected
 
@@ -243,11 +244,14 @@ int main(void)
 	tsl2561.addr = TSL2561_I2C_ADDRESS_1; //0x39 address (TSL251 ADDR SEL pin left FLOATING)
 	tsl2561.i2c = &hi2c1;
 	while (!tsl2561_init(&tsl2561)) {
-		PRINTF("TSL2561 initialization failed!\n\r");
+		//PRINTF("TSL2561 initialization failed!\n\r");
 	}
 
 	/* Check ID of TSL2561 */
-	bool tsl2561p = ((tsl2561.id && 0xF0) >> 4) == TSL2561_CHIP_ID; //0x1 value (TSL2561)
+	bool tsl2561p = ((tsl2561.id && 0xF0) >> 4) == TSL2561_CHIP_ID; //0x01 value (TSL2561)
+	char tsl_chip[10];
+	sprintf(tsl_chip, "%02x\n\r", tsl2561.id);
+	PRINTF(tsl_chip);
 	sprintf(lux_sen, "Light sensor found: %s\n\r",tsl2561p ? "TSL2561" : "TSL2560");
 	PRINTF(lux_sen);
 
@@ -263,31 +267,32 @@ int main(void)
 
 		ENABLE_IRQ();
 
+		// SENSORS READING OPERATIONS
+
 		/* ENVIRONMENTAL SENSOR BMx280 READ OPERATIONS */
 		if(!bmp280_read_float(&bmp280, &temp, &pres, &hum)) {  //uses bmp280.h
 			PRINTF("BMx280 reading failed!\n\r");
 		}
 		else {
-			sprintf(str_pre,"P: %.2f Pa, ", pres); 							// NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
+			sprintf(str_pre,"P: %.2f Pa, ", pres); 	// NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
 			PRINTF(str_pre);
-			sprintf(str_tem,"T: %.2f C", temp);
+			sprintf(str_tem,"T: %.2f C, ", temp);
 			PRINTF(str_tem);
 			if (bme280p) {
-				sprintf(str_hum,", H: %.2f\n\r", hum);
-			}
-			else {
-				sprintf(str_hum,"\n\r");
+				sprintf(str_hum,"H: %.2f, ", hum);
 			}
 			PRINTF(str_hum);
 		}
 
 		/* GAS SENSOR (ADC) READ OPERATIONS */
 		gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
-		sprintf(str_gas,"G: %d, ",(int)gas);
+		sprintf(str_gas,"G: %d %%, ",(int)gas);
 		PRINTF(str_gas);
 
 		/* LIGHT SENSOR TSL2561 READ OPERATIONS */
 		lux = tsl2561_read_intensity(&tsl2561);
+		sprintf(str_lux,"L: %lu\n\r", lux);
+		PRINTF(str_lux);
 
 	}
 }
