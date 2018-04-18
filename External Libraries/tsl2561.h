@@ -125,6 +125,6 @@ typedef struct {
  *  Public functions headers
  */
 bool tsl2561_init(TSL2561_HandleTypedef *dev);
-unsigned long tsl2561_read_intensity(TSL2561_HandleTypedef *dev);
+bool tsl2561_read_intensity(TSL2561_HandleTypedef *dev, unsigned long *lux);
 
 #endif /* TSL2561_H_ */

@@ -76,7 +76,7 @@
 /*!
  * Defines the application data transmission duty cycle. 5s, value in [ms].
  */
-#define APP_TX_DUTYCYCLE                            4000
+#define APP_TX_DUTYCYCLE                            5000
 /*!
  * LoRaWAN Adaptive Data Rate
  * @note Please note that when ADR is enabled the end-device should be static
@@ -293,9 +293,11 @@ int main(void)
 			sprintf(str_hum,"H: %.2f %%%%, ", hum);
 		}
 		PRINTF(str_hum);
-		sprintf(str_gas,"G: %d ppm, ",(int)gas);
+		sprintf(str_gas,"G: %d ppm, ", (int)gas);
 		PRINTF(str_gas);
-		lux = tsl2561_read_intensity(&tsl2561);
+		if(!tsl2561_read_intensity(&tsl2561, &lux)) {
+			PRINTF("TSL2561 reading failed!\n\r");
+		}
 		sprintf(str_lux,"L: %lu lx\n\r", lux);
 		PRINTF(str_lux);
 

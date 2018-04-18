@@ -71,24 +71,21 @@ static inline bool read_data(TSL2561_HandleTypedef *dev, uint8_t addr, uint8_t *
 /**
  *
  */
-static uint16_t read_ADC_channel(TSL2561_HandleTypedef *dev, uint8_t low_byte_addr, uint8_t high_byte_addr) {
+static bool read_ADC_channel(TSL2561_HandleTypedef *dev, uint8_t low_byte_addr, uint8_t high_byte_addr, uint16_t *data) {
 
 	uint8_t received_data[2];
 	received_data[0] = 0;
 	received_data[1] = 0;
-	uint16_t data = 0;
+	*data = 0;
+
 	if(!read_data(dev, low_byte_addr, &received_data[0], 1))
-	{
-
-	}
+		return false;
 	if(!read_data(dev, high_byte_addr, &received_data[1], 1))
-	{
+		return false;
 
-	}
-	data = (uint16_t) received_data[0];
-	data |= (uint16_t) (received_data[1] << 8);
-
-	return data;
+	*data = (uint16_t) received_data[0];
+	*data |= (uint16_t) (received_data[1] << 8);
+	return true;
 }
 
 /**
@@ -255,14 +252,27 @@ bool tsl2561_init(TSL2561_HandleTypedef *dev)
  * Ch1 is associated to the diode that detects only the infrared light spectrum while ch0 detects both the visible and the infrared light spectrum.
  * So, in order to calibrate the sensor within the human visible light spectrum range, ch1 will be subtracted from ch0.
  * */
-unsigned long tsl2561_read_intensity(TSL2561_HandleTypedef *dev) {
+bool tsl2561_read_intensity(TSL2561_HandleTypedef *dev, unsigned long *lux) {
+	uint16_t ch0 = 0;
+	uint16_t ch1 = 0;
 
 	// Reading process of the ADC registers
-	write_register8(dev, TSL2561_CTRL, TSL2561_POWER_ON); // power on the device
+	if(!write_register8(dev, TSL2561_CTRL, TSL2561_POWER_ON)) // power on the device
+		return false;
 	HAL_Delay(500);
-	long ch0 = read_ADC_channel(dev, CHANNEL0_LOW_BYTE_ADDRESS, CHANNEL0_HIGH_BYTE_ADDRESS);
-	long ch1 = read_ADC_channel(dev, CHANNEL1_LOW_BYTE_ADDRESS, CHANNEL1_HIGH_BYTE_ADDRESS);
-	write_register8(dev, TSL2561_CTRL, TSL2561_POWER_OFF); // power off the device
+	if(!read_ADC_channel(dev, CHANNEL0_LOW_BYTE_ADDRESS, CHANNEL0_HIGH_BYTE_ADDRESS, &ch0))
+	{
+		PRINTF("TSL2561: Channel0 unable to read!\n\r");
+		return false;
+	}
+	if(!read_ADC_channel(dev, CHANNEL1_LOW_BYTE_ADDRESS, CHANNEL1_HIGH_BYTE_ADDRESS, &ch1))
+	{
+		PRINTF("TSL2561: Channel1 unable to read!\n\r");
+		return false;
+	}
+	if(!write_register8(dev, TSL2561_CTRL, TSL2561_POWER_OFF)) // power off the device
+		return false;
 
-	return lux_calculation(1,2,ch0,ch1,0);
+	*lux = lux_calculation(1,2,ch0,ch1,0);
+	return true;
 }
