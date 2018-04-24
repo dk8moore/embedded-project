@@ -76,17 +76,17 @@
 /*!
  * Defines the application data transmission duty cycle. 5s, value in [ms].
  */
-#define APP_TX_DUTYCYCLE                            5000
+#define APP_TX_DUTYCYCLE                            4000
 /*!
  * LoRaWAN Adaptive Data Rate
  * @note Please note that when ADR is enabled the end-device should be static
  */
-#define LORAWAN_ADR_STATE LORAWAN_ADR_ON
+#define LORAWAN_ADR_STATE 							LORAWAN_ADR_ON
 /*!
  * LoRaWAN Default data Rate Data Rate
  * @note Please note that LORAWAN_DEFAULT_DATA_RATE is used only when ADR is disabled 
  */
-#define LORAWAN_DEFAULT_DATA_RATE DR_0
+#define LORAWAN_DEFAULT_DATA_RATE 					DR_0
 /*!
  * LoRaWAN application port
  * @note do not use 224. It is reserved for certification
@@ -107,7 +107,15 @@
 /*!
  * User application data buffer size
  */
-#define LORAWAN_APP_DATA_BUFF_SIZE                           64
+#define LORAWAN_APP_DATA_BUFF_SIZE                  64
+
+/*!
+ * User application data buffer size
+ */
+#define TOKEN_DEVICE								7765214
+
+
+
 /*!
  * User application data
  */
@@ -138,6 +146,9 @@ static void LoraStartTx(TxEventType_t EventType);
 /* tx timer callback function*/
 static void OnTxTimerEvent( void );
 
+/* Print on the vcom the values read by the sensors */
+static void Print_Sensors(void);
+
 /* Private variables ---------------------------------------------------------*/
 /* load Main call backs structure*/
 static LoRaMainCallback_t LoRaMainCallbacks ={ HW_GetBatteryLevel,
@@ -156,11 +167,11 @@ static uint8_t AppLedStateOn = RESET;
 static TimerEvent_t TxTimer;
 
 #ifdef USE_B_L072Z_LRWAN1
-/*!
- * Timer to handle the application Tx Led to toggle
- */
-static TimerEvent_t TxLedTimer;
-static void OnTimerLedEvent( void );
+	/*!
+	 * Timer to handle the application Tx Led to toggle
+	 */
+	static TimerEvent_t TxLedTimer;
+	static void OnTimerLedEvent( void );
 #endif
 /* !
  *Initialises the Lora Parameters
@@ -176,14 +187,14 @@ TSL2561_HandleTypedef tsl2561;
 u_int16_t gas;
 float pres, temp, hum;
 unsigned long lux;
-char str_gas[10]; // string for output on st-link the gas sensor read-out
-char str_pre[15]; // string for output on st-link the pressure sensor read-out
-char str_tem[15]; // string for output on st-link the temperature sensor read-out
-char str_hum[15]; // string for output on st-link the humidity sensor read-out
+char str_gas[15]; // string for output on st-link the gas sensor read-out
+char str_bmp[30]; // string for output on st-link the enviromental sensor read-out
+char str_hum[15];
 char str_lux[15]; // string for output on st-link the light sensor read-out
 char env_sen[50]; // string for output on st-link the type of environmental sensor connected
 char lux_sen[50]; // string for output on st-link the type of light sensor connected
 char str_sen[50];
+bool bme280p, tsl2561p;
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -219,7 +230,7 @@ int main(void)
 	LORA_Join();
 
 	/* Start a timer to trasmit data on LORA network */
-	LoraStartTx(TX_ON_TIMER);
+	LoraStartTx(TX_ON_TIMER); //TX_ON_EVENT allows to start LoRa transmission by pressing the USER BUTTON
 
 	pres = 0.0;
 	temp = 0.0;
@@ -241,7 +252,7 @@ int main(void)
 	}
 
 	/* Check ID of BMP280 */
-	bool bme280p = bmp280.id == BME280_CHIP_ID; //0x60 value (BME280, temperature+pressure+humidity)
+	bme280p = bmp280.id == BME280_CHIP_ID; //0x60 value (BME280, temperature+pressure+humidity)
 	sprintf(env_sen, "Enviromental sensor found: %s\n\r",bme280p ? "BME280" : "BMP280");
 	PRINTF(env_sen);
 
@@ -255,7 +266,7 @@ int main(void)
 	}
 
 	/* Check ID of TSL2561 */
-	bool tsl2561p = ((tsl2561.id && 0xF0) >> 4) == TSL2561_CHIP_ID; //0x01 value (TSL2561)
+	tsl2561p = ((tsl2561.id && 0xF0) >> 4) == TSL2561_CHIP_ID; //0x01 value (TSL2561)
 	//char tsl_chip[10];
 	//sprintf(tsl_chip, "%02x\n\r", tsl2561.id);
 	//PRINTF(tsl_chip);
@@ -264,168 +275,103 @@ int main(void)
 
 	while(1)
 	{
-		/*DISABLE_IRQ( );
-		// if an interrupt has occurred after DISABLE_IRQ, it is kept pending
-		// and cortex will not enter low power anyway
-
-		#ifndef LOW_POWER_DISABLE
-			LPM_EnterLowPower( );
-		#endif
-
-		ENABLE_IRQ();
-		*/
 		// SENSORS READING OPERATIONS
 		/* ENVIRONMENTAL SENSOR BMx280 READ OPERATIONS */
 		if(!bmp280_read_float(&bmp280, &temp, &pres, &hum)) {  //uses bmp280.h
 			PRINTF("BMx280 reading failed!\n\r");
 		}
 		gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
-		/*if (bme280p)
-			sprintf(str_sen,"T: %.2f °C, P: %.2f Pa, H: %.2f %%%%, G: %d ppm, ", temp, pres, hum, (int)gas); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
-			else sprintf(str_sen,"T: %.2f °C, P: %.2f Pa, G: %d ppm, ", temp, pres, (int)gas);
-		PRINTF(str_sen);*/
-
-		sprintf(str_pre,"P: %.2f Pa, ", pres);
-		PRINTF(str_pre);
-		sprintf(str_tem,"T: %.2f °C, ", temp);
-		PRINTF(str_tem);
-		if (bme280p) {
-			sprintf(str_hum,"H: %.2f %%%%, ", hum);
-		}
-		PRINTF(str_hum);
-		sprintf(str_gas,"G: %d ppm, ", (int)gas);
-		PRINTF(str_gas);
-		if(!tsl2561_read_intensity(&tsl2561, &lux)) {
+		if(!tsl2561_read_intensity(&tsl2561, &lux)) {	//uses tsl2561.h
 			PRINTF("TSL2561 reading failed!\n\r");
 		}
-		sprintf(str_lux,"L: %lu lx\n\r", lux);
-		PRINTF(str_lux);
+
+		Print_Sensors();
 
 	}
 }
 
 static void LORA_HasJoined( void )
 {
-#if( OVER_THE_AIR_ACTIVATION != 0 )
-  PRINTF("JOINED\n\r");
-#endif
-  LORA_RequestClass( LORAWAN_DEFAULT_CLASS );
+	#if( OVER_THE_AIR_ACTIVATION != 0 )
+		PRINTF("JOINED\n\r");
+	#endif
+	LORA_RequestClass( LORAWAN_DEFAULT_CLASS );
+}
+
+static void Print_Sensors(void)
+{
+	sprintf(str_bmp,"T: %.2f °C, P: %.2f Pa, ", temp, pres); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
+	if (bme280p) {
+		sprintf(str_hum,"H: %.2f %%%%, ", hum);
+	}
+	sprintf(str_lux,"L: %d lx\n\r", (int)lux);
+	sprintf(str_gas,"G: %d ppm, ", (int)gas);
+	PRINTF(str_bmp);
+	PRINTF(str_hum);
+	PRINTF(str_gas);
+	PRINTF(str_lux);
+	return;
 }
 
 static void Send( void )
 {
-  /* USER CODE BEGIN 3 */
-  uint16_t pressure = 0;
-  int16_t temperature = 0;
-  uint16_t humidity = 0;
-  uint8_t batteryLevel;
-  sensor_t sensor_data;
-  
-  if ( LORA_JoinStatus () != LORA_SET)
-  {
-    /*Not joined, try again later*/
-    return;
-  }
-  
-  DBG_PRINTF("SEND REQUEST\n\r");
-#ifndef CAYENNE_LPP
-  int32_t latitude, longitude = 0;
-  uint16_t altitudeGps = 0;
-#endif
-  
-#ifdef USE_B_L072Z_LRWAN1
-  TimerInit( &TxLedTimer, OnTimerLedEvent );
-  
-  TimerSetValue(  &TxLedTimer, 200);
-  
-  LED_On( LED_RED1 ) ; 
-  
-  TimerStart( &TxLedTimer );  
-#endif
 
-  BSP_sensor_Read( &sensor_data );
+	//uint8_t batteryLevel;
+	uint16_t token = TOKEN_DEVICE;
+	char message[85]; //43 "string" characters + 7 token + 6 temperature + 10 pressure + 6 humidity + 6 gas + 7 lux = 85
 
-#ifdef CAYENNE_LPP
-  uint8_t cchannel=0;
-  temperature = ( int16_t )( sensor_data.temperature * 10 );     /* in �C * 10 */
-  pressure    = ( uint16_t )( sensor_data.pressure * 100 / 10 );  /* in hPa / 10 */
-  humidity    = ( uint16_t )( sensor_data.humidity * 2 );        /* in %*2     */
-  uint32_t i = 0;
+	if ( LORA_JoinStatus () != LORA_SET)
+	{
+		/*Not joined, try again later*/
+		return;
+	}
 
-  batteryLevel = HW_GetBatteryLevel( );                     /* 1 (very low) to 254 (fully charged) */
+	PRINTF("SEND REQUEST\n\r");
 
-  AppData.Port = LPP_APP_PORT;
+	#ifdef USE_B_L072Z_LRWAN1
+		TimerInit( &TxLedTimer, OnTimerLedEvent );
 
-  AppData.Buff[i++] = cchannel++;
-  AppData.Buff[i++] = LPP_DATATYPE_BAROMETER;
-  AppData.Buff[i++] = ( pressure >> 8 ) & 0xFF;
-  AppData.Buff[i++] = pressure & 0xFF;
-  AppData.Buff[i++] = cchannel++;
-  AppData.Buff[i++] = LPP_DATATYPE_TEMPERATURE; 
-  AppData.Buff[i++] = ( temperature >> 8 ) & 0xFF;
-  AppData.Buff[i++] = temperature & 0xFF;
-  AppData.Buff[i++] = cchannel++;
-  AppData.Buff[i++] = LPP_DATATYPE_HUMIDITY;
-  AppData.Buff[i++] = humidity & 0xFF;
-#if defined( REGION_US915 ) || defined( REGION_US915_HYBRID ) || defined ( REGION_AU915 )
-  /* The maximum payload size does not allow to send more data for lowest DRs */
-#else
-  AppData.Buff[i++] = cchannel++;
-  AppData.Buff[i++] = LPP_DATATYPE_DIGITAL_INPUT; 
-  AppData.Buff[i++] = batteryLevel*100/254;
-  AppData.Buff[i++] = cchannel++;
-  AppData.Buff[i++] = LPP_DATATYPE_DIGITAL_OUTPUT; 
-  AppData.Buff[i++] = AppLedStateOn;
-#endif  /* REGION_XX915 */
-#else  /* not CAYENNE_LPP */
+		TimerSetValue(  &TxLedTimer, 200);
 
-  temperature = ( int16_t )( sensor_data.temperature * 100 );     /* in �C * 100 */
-  pressure    = ( uint16_t )( sensor_data.pressure * 100 / 10 );  /* in hPa / 10 */
-  humidity    = ( uint16_t )( sensor_data.humidity * 10 );        /* in %*10     */
-  latitude = sensor_data.latitude;
-  longitude= sensor_data.longitude;
-  uint32_t i = 0;
+		LED_On( LED_RED1 ) ;
 
-  batteryLevel = HW_GetBatteryLevel( );                     /* 1 (very low) to 254 (fully charged) */
+		TimerStart( &TxLedTimer );
+	#endif
 
-  AppData.Port = LORAWAN_APP_PORT;
+	//uint32_t i = 0;
 
-#if defined( REGION_US915 ) || defined( REGION_US915_HYBRID ) || defined ( REGION_AU915 )
-  AppData.Buff[i++] = AppLedStateOn;
-  AppData.Buff[i++] = ( pressure >> 8 ) & 0xFF;
-  AppData.Buff[i++] = pressure & 0xFF;
-  AppData.Buff[i++] = ( temperature >> 8 ) & 0xFF;
-  AppData.Buff[i++] = temperature & 0xFF;
-  AppData.Buff[i++] = ( humidity >> 8 ) & 0xFF;
-  AppData.Buff[i++] = humidity & 0xFF;
-  AppData.Buff[i++] = batteryLevel;
-  AppData.Buff[i++] = 0;
-  AppData.Buff[i++] = 0;
-  AppData.Buff[i++] = 0;
-#else  /* not REGION_XX915 */
-  AppData.Buff[i++] = AppLedStateOn;
-  AppData.Buff[i++] = ( pressure >> 8 ) & 0xFF;
-  AppData.Buff[i++] = pressure & 0xFF;
-  AppData.Buff[i++] = ( temperature >> 8 ) & 0xFF;
-  AppData.Buff[i++] = temperature & 0xFF;
-  AppData.Buff[i++] = ( humidity >> 8 ) & 0xFF;
-  AppData.Buff[i++] = humidity & 0xFF;
-  AppData.Buff[i++] = batteryLevel;
-  AppData.Buff[i++] = ( latitude >> 16 ) & 0xFF;
-  AppData.Buff[i++] = ( latitude >> 8 ) & 0xFF;
-  AppData.Buff[i++] = latitude & 0xFF;
-  AppData.Buff[i++] = ( longitude >> 16 ) & 0xFF;
-  AppData.Buff[i++] = ( longitude >> 8 ) & 0xFF;
-  AppData.Buff[i++] = longitude & 0xFF;
-  AppData.Buff[i++] = ( altitudeGps >> 8 ) & 0xFF;
-  AppData.Buff[i++] = altitudeGps & 0xFF;
-#endif  /* REGION_XX915 */
-#endif  /* CAYENNE_LPP */
-  AppData.BuffSize = i;
-  
-  LORA_send( &AppData, LORAWAN_DEFAULT_CONFIRM_MSG_STATE);
-  
-  /* USER CODE END 3 */
+	//batteryLevel = HW_GetBatteryLevel( );                     /* 1 (very low) to 254 (fully charged) */
+
+	/*
+	char head[] = "{\"D:\"";
+	char tail[] = "}";
+	char h_temp[] = ",\"T:\"";
+	char h_pres[] = ",\"p:\"";
+	char h_hum[] = ",\"h:\"";
+	char h_gas[] = ",\"g:\"";
+	char h_lux[] = ",\"L:\"";
+	char m_temp[];
+	char m_pres[];
+	char m_hum[];
+	char m_gas[];
+	char m_lux[];*/
+
+	AppData.Port = LORAWAN_APP_PORT;
+	sprintf(message,"{\"deveui\":\"%d,\"T:\"%.2f,\"p:\"%.2f,\"h:\"%.2f,\"g:\"%d,\"L:\"%d}", (int)token, temp, pres, hum, (int)gas, (int)lux);
+	memcpy(AppData.Buff, message, strlen(message)+1);
+	AppData.BuffSize = strlen(message)+1;
+
+	/*
+	AppData.Buff[i++] = ( pressure >> 8 ) & 0xFF;
+	AppData.Buff[i++] = pressure & 0xFF;
+	AppData.Buff[i++] = ( temperature >> 8 ) & 0xFF;
+	AppData.Buff[i++] = temperature & 0xFF;
+	AppData.Buff[i++] = ( humidity >> 8 ) & 0xFF;
+	AppData.Buff[i++] = humidity & 0xFF;
+	AppData.Buff[i++] = batteryLevel;*/
+
+	LORA_send( &AppData, LORAWAN_DEFAULT_CONFIRM_MSG_STATE);
+
 }
 
 
@@ -502,9 +448,9 @@ static void LORA_RxData( lora_AppData_t *AppData )
 
 static void OnTxTimerEvent( void )
 {
-  Send( );
-  /*Wait for next tx slot*/
-  TimerStart( &TxTimer);
+	Send();
+	/*Wait for next tx slot*/
+	TimerStart(&TxTimer);
 }
 
 static void LoraStartTx(TxEventType_t EventType)
@@ -548,10 +494,12 @@ static void LORA_ConfirmClass ( DeviceClass_t Class )
  * @param  line: The line in file as a number.
  * @retval None
  */
-void _Error_Handler(char *file, int line) {
+void _Error_Handler(char *file, int line)
+{
 	/* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
-	while (1) {
+	while (1)
+	{
 	}
 	/* USER CODE END Error_Handler_Debug */
 }
@@ -560,7 +508,7 @@ void _Error_Handler(char *file, int line) {
 #ifdef USE_B_L072Z_LRWAN1
 static void OnTimerLedEvent( void )
 {
-  LED_Off( LED_RED1 ) ; 
+	LED_Off(LED_RED1);
 }
 #endif
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
