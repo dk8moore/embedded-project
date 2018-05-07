@@ -76,7 +76,7 @@
 /*!
  * Defines the application data transmission duty cycle. 5s, value in [ms].
  */
-#define APP_TX_DUTYCYCLE                            4000
+#define APP_TX_DUTYCYCLE                            2000
 /*!
  * LoRaWAN Adaptive Data Rate
  * @note Please note that when ADR is enabled the end-device should be static
@@ -112,7 +112,7 @@
 /*!
  * User application data buffer size
  */
-#define TOKEN_DEVICE								7765214
+#define TOKEN_DEVICE								7765
 
 
 
@@ -318,7 +318,7 @@ static void Send( void )
 
 	//uint8_t batteryLevel;
 	uint16_t token = TOKEN_DEVICE;
-	char message[85]; //43 "string" characters + 7 token + 6 temperature + 10 pressure + 6 humidity + 6 gas + 7 lux = 85
+	char message[25]; //43 "string" characters + 7 token + 6 temperature + 10 pressure + 6 humidity + 6 gas + 7 lux = 85
 
 	if ( LORA_JoinStatus () != LORA_SET)
 	{
@@ -357,7 +357,7 @@ static void Send( void )
 	char m_lux[];*/
 
 	AppData.Port = LORAWAN_APP_PORT;
-	sprintf(message,"{\"deveui\":\"%d,\"T:\"%.2f,\"p:\"%.2f,\"h:\"%.2f,\"g:\"%d,\"L:\"%d}", (int)token, temp, pres, hum, (int)gas, (int)lux);
+	sprintf(message,"{\"D\":\"%d\"}", (int)token);//, temp, pres, hum, (int)gas, (int)lux);
 	memcpy(AppData.Buff, message, strlen(message)+1);
 	AppData.BuffSize = strlen(message)+1;
 

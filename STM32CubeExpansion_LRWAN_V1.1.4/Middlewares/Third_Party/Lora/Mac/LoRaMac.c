@@ -178,7 +178,7 @@ static bool IsUpLinkCounterFixed = false;
 /*!
  * Used for test purposes. Disables the opening of the reception windows.
  */
-static bool IsRxWindowsEnabled = true;
+static bool IsRxWindowsEnabled = false;
 
 /*!
  * Indicates if the MAC layer has already joined a network.
@@ -2023,7 +2023,7 @@ static void ResetMacParameters( void )
     MacCommandsBufferIndex = 0;
     MacCommandsBufferToRepeatIndex = 0;
 
-    IsRxWindowsEnabled = true;
+    //IsRxWindowsEnabled = true;
 
     LoRaMacParams.ChannelsTxPower = LoRaMacParamsDefaults.ChannelsTxPower;
     LoRaMacParams.ChannelsDatarate = LoRaMacParamsDefaults.ChannelsDatarate;
