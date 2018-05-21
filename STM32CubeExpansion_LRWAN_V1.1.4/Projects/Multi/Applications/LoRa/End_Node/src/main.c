@@ -77,7 +77,7 @@
 /*!
  * Defines the application data transmission duty cycle. 20s, value in [ms].
  */
-#define APP_TX_DUTYCYCLE                            20000
+#define APP_TX_DUTYCYCLE                            10000
 /*!
  * LoRaWAN Adaptive Data Rate
  * @note Please note that when ADR is enabled the end-device should be static
@@ -178,6 +178,9 @@ static void OnButtonEvent(void);
 
 /* Print on the vcom the values read by the sensors */
 static void Print_Sensors(void);
+
+/* Return the converted Bar value of the pressure in Pascal */
+static float Pa_to_Bar(float pa);
 
 /* Make the average of the readings btw two Lora sends */
 static void Sensors_Average(float times, float avgs[5]);
@@ -315,6 +318,7 @@ int main(void)
 	if(!bmp280_read_float(&bmp280, &temp_sum, &pres_sum, &hum_sum)) {  //uses bmp280.h
 		PRINTF("BMx280 reading failed!\n\r");
 	}
+	pres_sum = Pa_to_Bar(pres_sum);
 	gas_sum = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
 	if(!tsl2561_read_intensity(&tsl2561, &lux_sum)) {	//uses tsl2561.h
 		PRINTF("TSL2561 reading failed!\n\r");
@@ -330,6 +334,7 @@ int main(void)
 		if(!bmp280_read_float(&bmp280, &temp, &pres, &hum)) {  //uses bmp280.h
 			PRINTF("BMx280 reading failed!\n\r");
 		}
+		pres = Pa_to_Bar(pres);
 		gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
 		if(!tsl2561_read_intensity(&tsl2561, &lux)) {	//uses tsl2561.h
 			PRINTF("TSL2561 reading failed!\n\r");
@@ -357,9 +362,9 @@ static void LORA_HasJoined( void )
 
 static void Print_Sensors(void)
 {
-	sprintf(str_bmp,"T: %.2f °C, P: %.2f Pa, ", temp, pres); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
+	sprintf(str_bmp,"T: %.2f °C, p: %.3f bar, ", temp, pres); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
 	if (bme280p) {
-		sprintf(str_hum,"H: %.2f %%%%, ", hum);
+		sprintf(str_hum,"h: %.2f %%%%, ", hum);
 	}
 	sprintf(str_lux,"L: %d lx\n\r", (int)lux);
 	sprintf(str_gas,"G: %d ppm, ", (int)gas);
@@ -368,6 +373,11 @@ static void Print_Sensors(void)
 	PRINTF(str_gas);
 	PRINTF(str_lux);
 	return;
+}
+
+static float Pa_to_Bar(float pa)
+{
+	return pa/pow(10,5);
 }
 
 static void Sensors_Average(float times, float avgs[5]) //input: times (number of readings), output: array of averages
@@ -379,9 +389,9 @@ static void Sensors_Average(float times, float avgs[5]) //input: times (number o
 	avgs[4] = lux_sum/times;
 
 	//Print_Sensors_Average
-	sprintf(str_bmp,"AVERAGE -> T: %.2f °C, P: %.2f Pa, ", avgs[0], avgs[1]); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
+	sprintf(str_bmp,"AVERAGE -> T: %.2f °C, p: %.3f bar, ", avgs[0], avgs[1]); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
 	if (bme280p) {
-		sprintf(str_hum,"H: %.2f %%%%, ", avgs[2]);
+		sprintf(str_hum,"h: %.2f %%%%, ", avgs[2]);
 	}
 	sprintf(str_gas,"G: %d ppm, ", (int)avgs[3]);
 	sprintf(str_lux,"L: %d lx\n\r", (int)avgs[4]);
@@ -428,14 +438,15 @@ static void Send(float avgs[5])
 	if(past_avgs[0]!=avgs[0])
 		sprintf(temp_pl, ",\"T\":\"%.2f\"", avgs[0]);
 	if(past_avgs[1]!=avgs[1])
-		sprintf(pres_pl, ",\"p\":\"%.2f\"", avgs[1]);
+		sprintf(pres_pl, ",\"p\":\"%.3f\"", avgs[1]);
 	if(past_avgs[2]!=avgs[2])
 		sprintf(hum_pl, ",\"h\":\"%.2f\"", avgs[2]);
 	if(past_avgs[3]!=avgs[3])
 		sprintf(gas_pl, ",\"g\":\"%d\"", (int)avgs[3]);
 	if(past_avgs[4]!=avgs[4])
 		sprintf(lux_pl, ",\"l\":\"%d\"", (int)avgs[4]);
-	snprintf(message, sizeof(message), "%s%s%s%s%s%s%s", head, temp_pl, pres_pl, hum_pl, gas_pl, lux_pl, tail);
+	//snprintf(message, sizeof(message), "%s%s%s%s%s%s%s", head, temp_pl, pres_pl, hum_pl, gas_pl, lux_pl, tail); //TOTAL
+	snprintf(message, sizeof(message), "%s%s%s%s%s", head, temp_pl, gas_pl, lux_pl, tail); //SHORT
 	AverageCopy(past_avgs, avgs);
 	memcpy(AppData.Buff, message, strlen(message)+1);
 	AppData.BuffSize = strlen(message)+1;
