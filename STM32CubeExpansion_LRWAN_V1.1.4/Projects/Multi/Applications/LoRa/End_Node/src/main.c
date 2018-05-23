@@ -77,7 +77,7 @@
 /*!
  * Defines the application data transmission duty cycle. 20s, value in [ms].
  */
-#define APP_TX_DUTYCYCLE                            10000
+#define APP_TX_DUTYCYCLE                            6000
 /*!
  * LoRaWAN Adaptive Data Rate
  * @note Please note that when ADR is enabled the end-device should be static
@@ -382,9 +382,9 @@ static float Pa_to_Bar(float pa)
 
 static void Sensors_Average(float times, float avgs[5]) //input: times (number of readings), output: array of averages
 {
-	avgs[0] = temp_sum/times;
-	avgs[1] = pres_sum/times;
-	avgs[2] = hum_sum/times;
+	avgs[0] = roundf((temp_sum/times)*100)/100;
+	avgs[1] = roundf((pres_sum/times)*1000)/1000;
+	avgs[2] = roundf((hum_sum/times)*100)/100;
 	avgs[3] = gas_sum/times;
 	avgs[4] = lux_sum/times;
 
@@ -406,18 +406,18 @@ static void Sensors_Average(float times, float avgs[5]) //input: times (number o
 static void Send(float avgs[5])
 {
 	//uint8_t batteryLevel;
-	uint16_t token = TOKEN_DEVICE;
-	char message[62]; //45 "string" characters + 4 token + 5 temperature + 7 pressure + 5 humidity (+ 6 gas + 7 lux = 85)
-	char head[15];
+	int token = TOKEN_DEVICE;
+	char message[64]; //45 "string" characters + 4 token + 5 temperature + 7 pressure + 5 humidity (+ 6 gas + 7 lux = 85)
+	char head[16];
 	sprintf(head, "{\"D\":\"%d\"", token);
-	char temp_pl[] = "";
-	char pres_pl[] = "";
-	char hum_pl[] = "";
-	char gas_pl[] = "";
-	char lux_pl[] = "";
-	char tail[] = "}";
+	char temp_pl[17] = "";
+	char pres_pl[16] = "";
+	char hum_pl[17] = "";
+	char gas_pl[16] = "";
+	char lux_pl[17] = "";
+	char tail = '}';
 
-	if ( LORA_JoinStatus () != LORA_SET)
+	if (LORA_JoinStatus()!=LORA_SET)
 	{
 		/*Not joined, try again later*/
 		return;
@@ -425,9 +425,9 @@ static void Send(float avgs[5])
 	//PRINTF("SEND REQUEST\n\r");
 	#ifdef USE_B_L072Z_LRWAN1
 		TimerInit( &TxLedTimer, OnTimerLedEvent);
-		TimerSetValue(  &TxLedTimer, 200);
-		LED_On( LED_RED1 ) ;
-		TimerStart( &TxLedTimer );
+		TimerSetValue(&TxLedTimer, 200);
+		LED_On(LED_RED1);
+		TimerStart(&TxLedTimer);
 	#endif
 
 	//batteryLevel = HW_GetBatteryLevel( );                     /* 1 (very low) to 254 (fully charged) */
@@ -435,19 +435,43 @@ static void Send(float avgs[5])
 	AppData.Port = LORAWAN_APP_PORT;
 
 	/* SPEZZARE TUTTA LA STRINGA DA MANDARE */
+
 	if(past_avgs[0]!=avgs[0])
 		sprintf(temp_pl, ",\"T\":\"%.2f\"", avgs[0]);
 	if(past_avgs[1]!=avgs[1])
 		sprintf(pres_pl, ",\"p\":\"%.3f\"", avgs[1]);
 	if(past_avgs[2]!=avgs[2])
 		sprintf(hum_pl, ",\"h\":\"%.2f\"", avgs[2]);
-	if(past_avgs[3]!=avgs[3])
+	if((int)past_avgs[3]!=(int)avgs[3])
 		sprintf(gas_pl, ",\"g\":\"%d\"", (int)avgs[3]);
-	if(past_avgs[4]!=avgs[4])
+	if((int)past_avgs[4]!=(int)avgs[4])
 		sprintf(lux_pl, ",\"l\":\"%d\"", (int)avgs[4]);
-	//snprintf(message, sizeof(message), "%s%s%s%s%s%s%s", head, temp_pl, pres_pl, hum_pl, gas_pl, lux_pl, tail); //TOTAL
-	snprintf(message, sizeof(message), "%s%s%s%s%s", head, temp_pl, gas_pl, lux_pl, tail); //SHORT
 	AverageCopy(past_avgs, avgs);
+	int tot_l = (strlen(head)+strlen(temp_pl)+strlen(pres_pl)+strlen(hum_pl)+strlen(gas_pl)+strlen(lux_pl)+strlen(tail));
+	if(tot_l<=sizeof(message))
+	{
+		// UNIQUE PACKET BECAUSE THE LENGHT ALLOWS TO SEND ONLY ONE
+
+		snprintf(message, sizeof(message), "%s%s%s%s%s%s%c", head, temp_pl, pres_pl, hum_pl, gas_pl, lux_pl, tail); //TOTAL
+		PRINTF(message);
+		PRINTF("\n\r");
+	}
+	else
+	{
+		// TWO PACKETs BECAUSE THE LENGHT OF A SINGLE PACKET EXCEEDS THE LIMITS ----> WARNING!!! CAN BE 3 TOO, MANAGE LATER or CHANGE ALL WITH COMPRESSION
+		// First Message
+		snprintf(message, sizeof(message), "%s%s%s%c", head, temp_pl, pres_pl, tail); //SHORT
+		PRINTF(message);
+		PRINTF("\n\r");
+		memcpy(AppData.Buff, message, strlen(message)+1);
+		AppData.BuffSize = strlen(message)+1;
+		LORA_send( &AppData, LORAWAN_DEFAULT_CONFIRM_MSG_STATE);
+
+		// Second Message
+		snprintf(message, sizeof(message), "%s%s%s%s%c", head, hum_pl, gas_pl, lux_pl, tail); //SHORT
+		PRINTF(message);
+		PRINTF("\n\r");
+	}
 	memcpy(AppData.Buff, message, strlen(message)+1);
 	AppData.BuffSize = strlen(message)+1;
 	LORA_send( &AppData, LORAWAN_DEFAULT_CONFIRM_MSG_STATE);
