@@ -82,17 +82,17 @@
  * LoRaWAN Adaptive Data Rate
  * @note Please note that when ADR is enabled the end-device should be static
  */
-#define LORAWAN_ADR_STATE 							LORAWAN_ADR_ON
+#define LORAWAN_ADR_STATE 							LORAWAN_ADR_OFF
 /*!
  * LoRaWAN Default data Rate Data Rate
  * @note Please note that LORAWAN_DEFAULT_DATA_RATE is used only when ADR is disabled 
  */
-#define LORAWAN_DEFAULT_DATA_RATE 					DR_0
+#define LORAWAN_DEFAULT_DATA_RATE 					DR_0 //DR_5 near transmission
 /*!
  * LoRaWAN application port
  * @note do not use 224. It is reserved for certification
  */
-#define LORAWAN_APP_PORT                            2
+#define LORAWAN_APP_PORT                            53
 /*!
  * Number of trials for the join request.
  */
@@ -113,7 +113,7 @@
 /*!
  * User application data buffer size
  */
-#define TOKEN_DEVICE								7765
+#define TOKEN_DEVICE								776522
 
 
 /*
@@ -151,7 +151,7 @@ static uint8_t AppDataBuff[LORAWAN_APP_DATA_BUFF_SIZE];
 /*!
  * User application data structure
  */
-static lora_AppData_t AppData={ AppDataBuff,  0 ,0 };
+static lora_AppData_t AppData={ AppDataBuff,  0 , LORAWAN_APP_PORT};
 /* Private macro -------------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
 
@@ -339,15 +339,15 @@ int main(void)
 		if(!tsl2561_read_intensity(&tsl2561, &lux)) {	//uses tsl2561.h
 			PRINTF("TSL2561 reading failed!\n\r");
 		}
-		if(lux!=0) // lux sensor miss a read every 15-20
-		{
+		//if(lux!=0) // lux sensor miss a read every 15-20
+		//{
 			temp_sum += temp;
 			pres_sum += pres;
 			hum_sum += hum;
 			gas_sum += gas;
 			lux_sum += lux;
 			read_counter++;
-		}
+		//}
 		//Print_Sensors();
 	}
 }
@@ -407,8 +407,8 @@ static void Send(float avgs[5])
 {
 	//uint8_t batteryLevel;
 	int token = TOKEN_DEVICE;
-	char message[64]; //45 "string" characters + 4 token + 5 temperature + 7 pressure + 5 humidity (+ 6 gas + 7 lux = 85)
-	char head[16];
+	char message[63]; //45 "string" characters + 4 token + 5 temperature + 7 pressure + 5 humidity (+ 6 gas + 7 lux = 85)
+	char head[18];
 	sprintf(head, "{\"D\":\"%d\"", token);
 	char temp_pl[17] = "";
 	char pres_pl[16] = "";
@@ -472,6 +472,8 @@ static void Send(float avgs[5])
 		PRINTF(message);
 		PRINTF("\n\r");
 	}
+
+	sprintf(message, "Prova");
 	memcpy(AppData.Buff, message, strlen(message)+1);
 	AppData.BuffSize = strlen(message)+1;
 	LORA_send( &AppData, LORAWAN_DEFAULT_CONFIRM_MSG_STATE);
