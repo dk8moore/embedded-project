@@ -621,17 +621,6 @@ bool RegionEU868RxConfig( RxConfigParams_t* rxConfig, int8_t* datarate )
 
 bool RegionEU868TxConfig( TxConfigParams_t* txConfig, int8_t* txPower, TimerTime_t* txTimeOnAir )
 {
-	/////// MODS ////////////
-
-
-	//txConfig->Channel = 0 ;
-	//txConfig ->Datarate = DR_5;
-
-	//txConfig ->TxPower = 20;
-
-	//////////////////////////
-
-
     RadioModems_t modem;
     int8_t phyDr = DataratesEU868[txConfig->Datarate];
     int8_t txPowerLimited = LimitTxPower( txConfig->TxPower, Bands[Channels[txConfig->Channel].Band].TxMaxPower, txConfig->Datarate, ChannelsMask );
