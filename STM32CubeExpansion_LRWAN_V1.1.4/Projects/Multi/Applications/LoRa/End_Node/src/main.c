@@ -47,6 +47,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 #include "hw.h"
 #include "low_power_manager.h"
 #include "lora.h"
@@ -76,17 +77,17 @@
 /*!
  * Defines the application data transmission duty cycle. 5s, value in [ms].
  */
-#define APP_TX_DUTYCYCLE                            2000
+#define APP_TX_DUTYCYCLE                            6000
 /*!
  * LoRaWAN Adaptive Data Rate
  * @note Please note that when ADR is enabled the end-device should be static
  */
-#define LORAWAN_ADR_STATE 							LORAWAN_ADR_ON
+#define LORAWAN_ADR_STATE 							LORAWAN_ADR_OFF // mod
 /*!
  * LoRaWAN Default data Rate Data Rate
  * @note Please note that LORAWAN_DEFAULT_DATA_RATE is used only when ADR is disabled 
  */
-#define LORAWAN_DEFAULT_DATA_RATE 					DR_0
+#define LORAWAN_DEFAULT_DATA_RATE 					DR_3 //DR_5 near transmission
 /*!
  * LoRaWAN application port
  * @note do not use 224. It is reserved for certification
@@ -107,12 +108,12 @@
 /*!
  * User application data buffer size
  */
-#define LORAWAN_APP_DATA_BUFF_SIZE                  64
+#define LORAWAN_APP_DATA_BUFF_SIZE                  123
 
 /*!
- * User application data buffer size
+ * ID of the device on the server front applications
  */
-#define TOKEN_DEVICE								7765
+#define TOKEN_DEVICE								776522
 
 
 
@@ -124,8 +125,9 @@ static uint8_t AppDataBuff[LORAWAN_APP_DATA_BUFF_SIZE];
 /*!
  * User application data structure
  */
-static lora_AppData_t AppData={ AppDataBuff,  0 ,0 };
-/* Private macro -------------------------------------------------------------*/
+static lora_AppData_t AppData = {AppDataBuff, 0, 0};
+
+
 /* Private function prototypes -----------------------------------------------*/
 
 /* call back when LoRa endNode has received a frame*/
@@ -138,18 +140,45 @@ static void LORA_HasJoined( void );
 static void LORA_ConfirmClass ( DeviceClass_t Class );
 
 /* LoRa endNode send request*/
-static void Send( void );
+static void Send(char message[LORAWAN_APP_DATA_BUFF_SIZE]);
 
 /* start the tx process*/
 static void LoraStartTx(TxEventType_t EventType);
 
-/* tx timer callback function*/
-static void OnTxTimerEvent( void );
+/* Tx timer callback function */
+static void OnTxTimerEvent(void);
+
+/* Tx button callback function */
+static void OnButtonEvent(void);
+
+// --------------------------------
+
+/* Procedure that call all the init functions for the 3 sensors connected to the board */
+static void Init_Sensors(void);
+
+/* Read a single value from all the sensors connected */
+static bool Read_Sensors(void);
+
+/* Sum the now reading to the past ones and increment the reading counter */
+static void Sum_Readings(void);
 
 /* Print on the vcom the values read by the sensors */
 static void Print_Sensors(void);
 
+/* Return the converted Bar value of the pressure in Pascal */
+static float Pa_to_Bar(float pa);
+
+/* Make the average of the readings btw two Lora sends */
+static void Sensors_Average(float times, float avgs[5]);
+
+/* Build the JSON string with the sensors data inside to send */
+static void Build_JSON_Payload(float avgs[5], char payload[LORAWAN_APP_DATA_BUFF_SIZE]);
+
+static void AverageCopy(float avg_out[5], float avg_in[5]);
+
+
 /* Private variables ---------------------------------------------------------*/
+
 /* load Main call backs structure*/
 static LoRaMainCallback_t LoRaMainCallbacks ={ HW_GetBatteryLevel,
                                                HW_GetTemperatureLevel,
@@ -184,17 +213,26 @@ static  LoRaParam_t LoRaParamInit= {LORAWAN_ADR_STATE,
 
 BMP280_HandleTypedef bmp280;
 TSL2561_HandleTypedef tsl2561;
-u_int16_t gas;
-float pres, temp, hum;
-unsigned long lux;
+bool bme280p, tsl2561p;
+
+float temp, temp_sum;
+float pres, pres_sum;
+float hum, hum_sum;
+u_int16_t gas, gas_sum;
+unsigned long lux, lux_sum;
+float past_avgs[5] = { -1.0, -1.0, -1.0, -1.0, -1.0 };
+
+int read_counter;
+bool ft_send;
+
 char str_gas[15]; // string for output on st-link the gas sensor read-out
-char str_bmp[30]; // string for output on st-link the enviromental sensor read-out
+char str_bmp[30]; // string for output on st-link the environmental sensor read-out
 char str_hum[15];
 char str_lux[15]; // string for output on st-link the light sensor read-out
 char env_sen[50]; // string for output on st-link the type of environmental sensor connected
 char lux_sen[50]; // string for output on st-link the type of light sensor connected
 char str_sen[50];
-bool bme280p, tsl2561p;
+
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -206,6 +244,8 @@ bool bme280p, tsl2561p;
 int main(void)
 {
 	// SYSTEM INITIALIZATION
+
+	ft_send = true;
 
 	/* STM32 HAL library initialisation*/
 	HAL_Init();
@@ -229,15 +269,33 @@ int main(void)
 	/* Join the LORA network */
 	LORA_Join();
 
-	/* Start a timer to trasmit data on LORA network */
+	/* Initialise the sensors connected */
+	Init_Sensors();
+
+	/* Start a timer to transmit data on LORA network */
 	LoraStartTx(TX_ON_TIMER); //TX_ON_EVENT allows to start LoRa transmission by pressing the USER BUTTON
 
-	pres = 0.0;
-	temp = 0.0;
-	hum = 0.0;
-	gas = 0;
-	lux = 0;
+	while(1)
+	{
+		if(Read_Sensors())
+		{
+			Sum_Readings();
+			//Print_Sensors();
+		}
+		else PRINTF("Error in reading!");
+	}
+}
 
+static void LORA_HasJoined( void )
+{
+	#if( OVER_THE_AIR_ACTIVATION != 0 )
+		PRINTF("JOINED\n\r");
+	#endif
+	LORA_RequestClass( LORAWAN_DEFAULT_CLASS );
+}
+
+static void Init_Sensors(void)
+{
 	//BMP280 INITIALIZATION
 
 	/* I2C1 bus initialization */
@@ -262,45 +320,62 @@ int main(void)
 	tsl2561.addr = TSL2561_I2C_ADDRESS_1; //0x39 address (TSL251 ADDR SEL pin left FLOATING)
 	tsl2561.i2c = &hi2c1;
 	while (!tsl2561_init(&tsl2561)) {
-		//PRINTF("TSL2561 initialization failed!\n\r");
+		PRINTF("TSL2561 initialization failed!\n\r");
 	}
 
 	/* Check ID of TSL2561 */
 	tsl2561p = ((tsl2561.id && 0xF0) >> 4) == TSL2561_CHIP_ID; //0x01 value (TSL2561)
-	//char tsl_chip[10];
-	//sprintf(tsl_chip, "%02x\n\r", tsl2561.id);
-	//PRINTF(tsl_chip);
 	sprintf(lux_sen, "Light sensor found: %s\n\r",tsl2561p ? "TSL2561" : "TSL2560");
 	PRINTF(lux_sen);
 
-	while(1)
-	{
-		// SENSORS READING OPERATIONS
-		/* ENVIRONMENTAL SENSOR BMx280 READ OPERATIONS */
-		if(!bmp280_read_float(&bmp280, &temp, &pres, &hum)) {  //uses bmp280.h
-			PRINTF("BMx280 reading failed!\n\r");
-		}
-		gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
-		if(!tsl2561_read_intensity(&tsl2561, &lux)) {	//uses tsl2561.h
-			PRINTF("TSL2561 reading failed!\n\r");
-		}
+	/* Initialize the reading variables */
+	pres = 0.0;
+	temp = 0.0;
+	hum = 0.0;
+	gas = 0;
+	lux = 0;
+	pres_sum = 0.0;
+	temp_sum = 0.0;
+	hum_sum = 0.0;
+	gas_sum = 0;
+	lux_sum = 0;
+	read_counter = 0;
 
-		Print_Sensors();
 
-	}
+
+	return;
 }
 
-static void LORA_HasJoined( void )
+static bool Read_Sensors(void)
 {
-	#if( OVER_THE_AIR_ACTIVATION != 0 )
-		PRINTF("JOINED\n\r");
-	#endif
-	LORA_RequestClass( LORAWAN_DEFAULT_CLASS );
+	// SENSORS READING OPERATIONS
+	/* ENVIRONMENTAL SENSOR BMx280 READ OPERATIONS */
+	if(!bmp280_read_float(&bmp280, &temp, &pres, &hum)) {  //uses bmp280.h
+		PRINTF("BMx280 reading failed!\n\r");
+		return false;
+	}
+	pres = Pa_to_Bar(pres);
+	gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
+	if(!tsl2561_read_intensity(&tsl2561, &lux)) {	//uses tsl2561.h
+		PRINTF("TSL2561 reading failed!\n\r");
+		return false;
+	}
+	return true;
+}
+
+static void Sum_Readings(void)
+{
+	temp_sum += temp;
+	pres_sum += pres;
+	hum_sum += hum;
+	gas_sum += gas;
+	lux_sum += lux;
+	read_counter++;
 }
 
 static void Print_Sensors(void)
 {
-	sprintf(str_bmp,"T: %.2f °C, P: %.2f Pa, ", temp, pres); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
+	sprintf(str_bmp,"T: %.1f °C, P: %.3f Pa, ", temp, pres); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
 	if (bme280p) {
 		sprintf(str_hum,"H: %.2f %%%%, ", hum);
 	}
@@ -310,70 +385,163 @@ static void Print_Sensors(void)
 	PRINTF(str_hum);
 	PRINTF(str_gas);
 	PRINTF(str_lux);
+}
+
+static void Sensors_Average(float times, float avgs[5]) //input: times (number of readings), output: array of averages
+{
+	avgs[0] = roundf((temp_sum/times)*10)/10;
+	avgs[1] = roundf((pres_sum/times)*1000)/1000;
+	avgs[2] = roundf((hum_sum/times)*100)/100;
+	avgs[3] = gas_sum/times;
+	avgs[4] = lux_sum/times;
+
+	//Print_Sensors_Average
+	/*
+	sprintf(str_bmp,"AVERAGE -> T: %.1f °C, p: %.3f bar, ", avgs[0], avgs[1]); // NEED TO ADD LINE IN LINKER FLAGS -> -u _printf_float TO ENABLE FLOAT PRINT
+	if (bme280p) {
+		sprintf(str_hum,"h: %.2f %%%%, ", avgs[2]);
+	}
+	sprintf(str_gas,"G: %d ppm, ", (int)avgs[3]);
+	sprintf(str_lux,"L: %d lx\n\r", (int)avgs[4]);
+	PRINTF(str_bmp);
+	PRINTF(str_hum);
+	PRINTF(str_gas);
+	PRINTF(str_lux);
+	*/
 	return;
 }
 
-static void Send( void )
+static float Pa_to_Bar(float pa)
 {
+	return pa/pow(10,5);
+}
 
-	//uint8_t batteryLevel;
-	uint16_t token = TOKEN_DEVICE;
-	char message[25]; //43 "string" characters + 7 token + 6 temperature + 10 pressure + 6 humidity + 6 gas + 7 lux = 85
+static void AverageCopy(float avg_out[5], float avg_in[5])
+{
+	for(int i=0;i<5;i++)
+	{
+		avg_out[i] = avg_in[i];
+	}
+	return;
+}
 
-	if ( LORA_JoinStatus () != LORA_SET)
+static void Send(char message[LORAWAN_APP_DATA_BUFF_SIZE])
+{
+	if(LORA_JoinStatus()!=LORA_SET)
 	{
 		/*Not joined, try again later*/
 		return;
 	}
-
-	PRINTF("SEND REQUEST\n\r");
-
+	//PRINTF("SEND REQUEST\n\r");
 	#ifdef USE_B_L072Z_LRWAN1
 		TimerInit( &TxLedTimer, OnTimerLedEvent );
-
 		TimerSetValue(  &TxLedTimer, 200);
-
 		LED_On( LED_RED1 ) ;
-
 		TimerStart( &TxLedTimer );
 	#endif
 
-	//uint32_t i = 0;
-
-	//batteryLevel = HW_GetBatteryLevel( );                     /* 1 (very low) to 254 (fully charged) */
-
-	/*
-	char head[] = "{\"D:\"";
-	char tail[] = "}";
-	char h_temp[] = ",\"T:\"";
-	char h_pres[] = ",\"p:\"";
-	char h_hum[] = ",\"h:\"";
-	char h_gas[] = ",\"g:\"";
-	char h_lux[] = ",\"L:\"";
-	char m_temp[];
-	char m_pres[];
-	char m_hum[];
-	char m_gas[];
-	char m_lux[];*/
-
 	AppData.Port = LORAWAN_APP_PORT;
-	sprintf(message,"{\"D\":\"%d\"}", (int)token);//, temp, pres, hum, (int)gas, (int)lux);
 	memcpy(AppData.Buff, message, strlen(message)+1);
 	AppData.BuffSize = strlen(message)+1;
-
-	/*
-	AppData.Buff[i++] = ( pressure >> 8 ) & 0xFF;
-	AppData.Buff[i++] = pressure & 0xFF;
-	AppData.Buff[i++] = ( temperature >> 8 ) & 0xFF;
-	AppData.Buff[i++] = temperature & 0xFF;
-	AppData.Buff[i++] = ( humidity >> 8 ) & 0xFF;
-	AppData.Buff[i++] = humidity & 0xFF;
-	AppData.Buff[i++] = batteryLevel;*/
-
-	LORA_send( &AppData, LORAWAN_DEFAULT_CONFIRM_MSG_STATE);
-
+	LORA_send(&AppData, LORAWAN_DEFAULT_CONFIRM_MSG_STATE);
 }
 
+static void Build_JSON_Payload(float avgs[5], char payload[LORAWAN_APP_DATA_BUFF_SIZE])
+{
+	char head[17];
+	sprintf(head, "{\"D\":\"%d\"", TOKEN_DEVICE);
+	char temp_pl[16] = "";
+	char pres_pl[16] = "";
+	char hum_pl[17] = "";
+	char gas_pl[17] = "";
+	char lux_pl[18] = "";
+	char tail = '}';
+
+	if(past_avgs[0]!=avgs[0])
+		sprintf(temp_pl, ",\"T\":\"%.1f\"", avgs[0]);
+	if(past_avgs[1]!=avgs[1])
+		sprintf(pres_pl, ",\"p\":\"%.3f\"", avgs[1]);
+	if(past_avgs[2]!=avgs[2])
+		sprintf(hum_pl, ",\"h\":\"%.2f\"", avgs[2]);
+	if((int)past_avgs[3]!=(int)avgs[3])
+		sprintf(gas_pl, ",\"g\":\"%d\"", (int)avgs[3]);
+	if((int)past_avgs[4]!=(int)avgs[4])
+		sprintf(lux_pl, ",\"l\":\"%d\"", (int)avgs[4]);
+
+	AverageCopy(past_avgs, avgs);
+	sprintf(payload, "%s%s%s%s%s%s%c", head, temp_pl, pres_pl, hum_pl, gas_pl, lux_pl, tail); //TOTAL
+}
+
+static void OnTxTimerEvent(void)
+{
+	float values[5];
+	char payload[LORAWAN_APP_DATA_BUFF_SIZE] = "";
+
+	Sensors_Average((float)read_counter, values);
+	pres_sum = 0.0;
+	temp_sum = 0.0;
+	hum_sum = 0.0;
+	gas_sum = 0;
+	lux_sum = 0;
+	read_counter = 0;
+
+	if(ft_send==true)
+	{
+		sprintf(payload, "{\"D\":\"%d\"}", TOKEN_DEVICE);
+		ft_send = false;
+	}
+	else Build_JSON_Payload(values, payload);
+	Send(payload);
+
+	//PRINTF(payload);
+	//PRINTF("\n\r");
+	//Send("{\"D\":\"776522\",\"T\":\"20.1\",\"p\":\"0.975\",\"h\":\"100.00\",\"g\":\"111111\",\"l\":\"11111111\"}");
+
+	/*Wait for next tx slot*/
+	TimerStart(&TxTimer);
+}
+
+static void OnButtonEvent(void)
+{
+	float values[5];
+	char payload[LORAWAN_APP_DATA_BUFF_SIZE] = "";
+
+	Sensors_Average((float)read_counter, values);
+	pres_sum = 0.0;
+	temp_sum = 0.0;
+	hum_sum = 0.0;
+	gas_sum = 0;
+	lux_sum = 0;
+	read_counter = 0;
+
+	Build_JSON_Payload(values, payload);
+	Send(payload);
+
+	PRINTF(payload);
+	PRINTF("\n\r");
+	//Send("{\"D\":\"776522\",\"T\":\"20.1\",\"p\":\"0.975\",\"h\":\"100.00\",\"g\":\"111111\",\"l\":\"11111111\"}");
+}
+
+static void LoraStartTx(TxEventType_t EventType)
+{
+	if (EventType == TX_ON_TIMER)
+	{
+		 /* send everytime timer elapses */
+		 TimerInit(&TxTimer, OnTxTimerEvent);
+		 TimerSetValue(&TxTimer, APP_TX_DUTYCYCLE);
+		 OnTxTimerEvent();
+	}
+	else
+	{
+		/* send everytime button is pushed (NEED MODIFICATIONS) */
+		GPIO_InitTypeDef initStruct={0};
+		initStruct.Mode = GPIO_MODE_IT_RISING;
+		initStruct.Pull = GPIO_PULLUP;
+		initStruct.Speed = GPIO_SPEED_HIGH;
+		HW_GPIO_Init(USER_BUTTON_GPIO_PORT, USER_BUTTON_PIN, &initStruct);
+		HW_GPIO_SetIrq(USER_BUTTON_GPIO_PORT, USER_BUTTON_PIN, 0, OnButtonEvent);
+	}
+}
 
 static void LORA_RxData( lora_AppData_t *AppData )
 {
@@ -444,36 +612,6 @@ static void LORA_RxData( lora_AppData_t *AppData )
     break;
   }
   /* USER CODE END 4 */
-}
-
-static void OnTxTimerEvent( void )
-{
-	Send();
-	/*Wait for next tx slot*/
-	TimerStart(&TxTimer);
-}
-
-static void LoraStartTx(TxEventType_t EventType)
-{
-  if (EventType == TX_ON_TIMER)
-  {
-    /* send everytime timer elapses */
-    TimerInit( &TxTimer, OnTxTimerEvent );
-    TimerSetValue( &TxTimer,  APP_TX_DUTYCYCLE); 
-    OnTxTimerEvent();
-  }
-  else
-  {
-    /* send everytime button is pushed */
-    GPIO_InitTypeDef initStruct={0};
-  
-    initStruct.Mode =GPIO_MODE_IT_RISING;
-    initStruct.Pull = GPIO_PULLUP;
-    initStruct.Speed = GPIO_SPEED_HIGH;
-
-    HW_GPIO_Init( USER_BUTTON_GPIO_PORT, USER_BUTTON_PIN, &initStruct );
-    HW_GPIO_SetIrq( USER_BUTTON_GPIO_PORT, USER_BUTTON_PIN, 0, Send );
-  }
 }
 
 static void LORA_ConfirmClass ( DeviceClass_t Class )
