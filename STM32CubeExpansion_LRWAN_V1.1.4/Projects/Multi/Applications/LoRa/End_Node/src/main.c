@@ -116,7 +116,7 @@
 /*!
  * Seconds on sleep
  */
-#define SLEEP_DUTYCYCLE                             8000
+#define SLEEP_DUTYCYCLE                             6000
 
 
 
@@ -280,17 +280,24 @@ int main(void)
 	Init_Sensors();
 
 	/* Start a timer to transmit data on LORA network */
-	LoraStartTx(TX_ON_TIMER); //TX_ON_EVENT allows to start LoRa transmission by pressing the USER BUTTON
-	//Init_Sleep_Timer();
+	//LoraStartTx(TX_ON_TIMER); //TX_ON_EVENT allows to start LoRa transmission by pressing the USER BUTTON
+	Init_Sleep_Timer();
 
 	while(1)
 	{
+		/*
 		if(Read_Sensors())
 		{
 			Sum_Readings();
 			//Print_Sensors();
 		}
-		else PRINTF("Error in reading!");
+		else PRINTF("Error in reading!");*/
+		if(LoRaTxDone==1)
+		{
+			PRINTF("Zzz..\n\r");
+			LPM_EnterLowPower();
+		} else DelayMs(100);
+
 	}
 }
 
@@ -310,18 +317,18 @@ static void Main_Routine(void)
 {
 	LoRaTxDone=0;
 	read_counter=0;
-	/*while(read_counter<READ_NUMBER)
+	while(read_counter<READ_NUMBER)
 	{
-		PRINTF("Prova\n\r");
 		read_counter++;
-		Read_Sensors();/*
-		if(Read_Sensors())
+		Read_Sensors();
+		/*if(Read_Sensors())
 		{
-			Sum_Readings();
-			//Print_Sensors();
+			//Sum_Readings();
+			Print_Sensors();
 		}
-		else PRINTF("Error in reading!");*/
-	//}
+		else PRINTF("Error in reading!");
+		HAL_Delay(100);*/
+	}
 	OnDemandEvent();
 	TimerStart(&WakeTimer); //WakeTimer sarebbe da far ripartire in sx1276.h
 }
@@ -330,8 +337,8 @@ static void Init_Sleep_Timer(void)
 {
 	TimerInit(&WakeTimer, Main_Routine);
 	TimerSetValue(&WakeTimer, SLEEP_DUTYCYCLE);
-	Main_Routine();
 	//TimerStart(&WakeTimer);
+	Main_Routine();
 }
 
 static void Init_Sensors(void)
@@ -395,7 +402,12 @@ static bool Read_Sensors(void)
 		return false;
 	}
 	pres = Pa_to_Bar(pres);
-	gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
+
+
+	//gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
+
+
+	HAL_Delay(150);
 	if(!tsl2561_read_intensity(&tsl2561, &lux)) {	//uses tsl2561.h
 		PRINTF("TSL2561 reading failed!\n\r");
 		return false;
@@ -560,7 +572,7 @@ static void OnTxTimerEvent(void)
 	//Send("{\"D\":\"776522\",\"T\":\"20.1\",\"p\":\"0.975\",\"h\":\"100.00\",\"g\":\"111111\",\"l\":\"11111111\"}");
 
 	/*Wait for next tx slot*/
-	TimerStart(&TxTimer);
+	TimerStart(&WakeTimer);
 
 }
 
