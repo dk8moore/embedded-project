@@ -78,6 +78,7 @@ typedef struct
     uint8_t  RegValue;
 }FskBandwidth_t;
 
+int LoRaTxDone;
 
 /*
  * Private functions prototypes
@@ -1657,6 +1658,9 @@ void SX1276OnDio0Irq( void )
                 {
                     RadioEvents->TxDone( );
                     PRINTF( "txDone\n\r" );
+                    LoRaTxDone = 1;
+                    //SX1276Reset( );
+
                 }
                 break;
             }

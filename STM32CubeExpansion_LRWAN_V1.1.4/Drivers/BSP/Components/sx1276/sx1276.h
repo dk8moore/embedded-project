@@ -53,6 +53,7 @@ Maintainer: Miguel Luis and Gregory Cristian
 
 #include "sx1276Regs-Fsk.h"
 #include "sx1276Regs-LoRa.h"
+#include "radio.h"
 
 /*!
  * Radio wake-up time from sleep
@@ -162,6 +163,8 @@ typedef struct SX1276_s
 }SX1276_t;
 
 extern SX1276_t SX1276;
+
+extern int LoRaTxDone;
 /*!
  * Hardware IO IRQ callback function definition
  */

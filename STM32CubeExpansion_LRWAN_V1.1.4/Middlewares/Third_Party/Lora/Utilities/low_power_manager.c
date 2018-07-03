@@ -53,7 +53,7 @@
 /* Private defines -----------------------------------------------------------*/
 /* Private macros ------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
-static uint32_t StopModeDisable = 0;
+static uint32_t StopModeDisable = 1;
 static uint32_t OffModeDisable = 0;
 
 /* Global variables ----------------------------------------------------------*/
