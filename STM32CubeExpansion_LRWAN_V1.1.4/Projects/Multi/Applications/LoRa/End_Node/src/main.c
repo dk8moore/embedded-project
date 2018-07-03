@@ -111,12 +111,12 @@
 /*!
  * Number of Sensors readings before send
  */
-#define READ_NUMBER									5
+#define READ_NUMBER									20
 
 /*!
  * Seconds on sleep
  */
-#define SLEEP_DUTYCYCLE                             6000
+#define SLEEP_DUTYCYCLE                             20000
 
 
 
@@ -285,16 +285,8 @@ int main(void)
 
 	while(1)
 	{
-		/*
-		if(Read_Sensors())
-		{
-			Sum_Readings();
-			//Print_Sensors();
-		}
-		else PRINTF("Error in reading!");*/
 		if(LoRaTxDone==1)
 		{
-			PRINTF("Zzz..\n\r");
 			LPM_EnterLowPower();
 		} else DelayMs(100);
 
@@ -317,17 +309,17 @@ static void Main_Routine(void)
 {
 	LoRaTxDone=0;
 	read_counter=0;
-	while(read_counter<READ_NUMBER)
+	if(ft_send==false)
 	{
-		read_counter++;
-		Read_Sensors();
-		/*if(Read_Sensors())
+		while(read_counter<READ_NUMBER)
 		{
-			//Sum_Readings();
-			Print_Sensors();
+			if(Read_Sensors())
+			{
+				Sum_Readings();
+				//Print_Sensors();
+			}
+			else PRINTF("Error in reading!");
 		}
-		else PRINTF("Error in reading!");
-		HAL_Delay(100);*/
 	}
 	OnDemandEvent();
 	TimerStart(&WakeTimer); //WakeTimer sarebbe da far ripartire in sx1276.h
@@ -403,16 +395,15 @@ static bool Read_Sensors(void)
 	}
 	pres = Pa_to_Bar(pres);
 
-
-	//gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
-
-
 	HAL_Delay(150);
 	if(!tsl2561_read_intensity(&tsl2561, &lux)) {	//uses tsl2561.h
 		PRINTF("TSL2561 reading failed!\n\r");
 		return false;
 	}
 	return true;
+	//HAL_Delay(150);
+	//gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
+	HAL_Delay(150);
 }
 
 static void Sum_Readings(void)
@@ -501,6 +492,8 @@ static void Build_JSON_Payload(float avgs[5], char payload[LORAWAN_APP_DATA_BUFF
 	char lux_pl[18] = "";
 	char tail = '}';
 
+	// INCREMENTAL SENDING -> BETA
+	/*
 	if(past_avgs[0]!=avgs[0])
 		sprintf(temp_pl, ",\"T\":\"%.1f\"", avgs[0]);
 	if(past_avgs[1]!=avgs[1])
@@ -512,7 +505,16 @@ static void Build_JSON_Payload(float avgs[5], char payload[LORAWAN_APP_DATA_BUFF
 	if((int)past_avgs[4]!=(int)avgs[4])
 		sprintf(lux_pl, ",\"l\":\"%d\"", (int)avgs[4]);
 
-	AverageCopy(past_avgs, avgs);
+	 */
+	//AverageCopy(past_avgs, avgs);
+
+	// FULL PAYLOAD ALWAYS
+	sprintf(temp_pl, ",\"T\":\"%.1f\"", avgs[0]);
+	sprintf(pres_pl, ",\"p\":\"%.3f\"", avgs[1]);
+	sprintf(hum_pl, ",\"h\":\"%.2f\"", avgs[2]);
+	sprintf(gas_pl, ",\"g\":\"%d\"", (int)avgs[3]);
+	sprintf(lux_pl, ",\"l\":\"%d\"", (int)avgs[4]);
+
 	sprintf(payload, "%s%s%s%s%s%s%c", head, temp_pl, pres_pl, hum_pl, gas_pl, lux_pl, tail); //TOTAL
 }
 
@@ -521,28 +523,25 @@ static void OnDemandEvent(void)
 	float values[5];
 	char payload[LORAWAN_APP_DATA_BUFF_SIZE] = "";
 
-	Sensors_Average((float)read_counter, values);
-	pres_sum = 0.0;
-	temp_sum = 0.0;
-	hum_sum = 0.0;
-	gas_sum = 0;
-	lux_sum = 0;
-	read_counter = 0;
-
 	if(ft_send==true)
 	{
 		sprintf(payload, "{\"D\":\"%d\"}", TOKEN_DEVICE);
 		ft_send = false;
 	}
-	else Build_JSON_Payload(values, payload);
-	//sprintf(payload, "{\"D\":\"776522\",\"T\":\"20.1\",\"p\":\"0.975\",\"h\":\"100.00\",\"g\":\"111111\",\"l\":\"11111111\"}");
-
-
+	else
+	{
+		Sensors_Average((float)read_counter, values);
+		pres_sum = 0.0;
+		temp_sum = 0.0;
+		hum_sum = 0.0;
+		gas_sum = 0;
+		lux_sum = 0;
+		read_counter = 0;
+		Build_JSON_Payload(values, payload);
+	}
 	Send(payload);
-
-	PRINTF(payload);
-	PRINTF("\n\r");
-	//Send("{\"D\":\"776522\",\"T\":\"20.1\",\"p\":\"0.975\",\"h\":\"100.00\",\"g\":\"111111\",\"l\":\"11111111\"}");
+	//PRINTF(payload);
+	//PRINTF("\n\r");
 }
 
 static void OnTxTimerEvent(void)
