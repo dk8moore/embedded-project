@@ -60,24 +60,17 @@
 #include "i2c.h"
 #include "bmp280.h"
 #include "tsl2561.h"
+#include "delay.h"
+#include "sx1276.h"
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 
-/*!
- * CAYENNE_LPP is myDevices Application server.
- */
-//#define CAYENNE_LPP
-#define LPP_DATATYPE_DIGITAL_INPUT  0x0
-#define LPP_DATATYPE_DIGITAL_OUTPUT 0x1
-#define LPP_DATATYPE_HUMIDITY       0x68
-#define LPP_DATATYPE_TEMPERATURE    0x67
-#define LPP_DATATYPE_BAROMETER      0x73
 #define LPP_APP_PORT 99
 /*!
  * Defines the application data transmission duty cycle. 5s, value in [ms].
  */
-#define APP_TX_DUTYCYCLE                            6000
+#define APP_TX_DUTYCYCLE                            5000
 /*!
  * LoRaWAN Adaptive Data Rate
  * @note Please note that when ADR is enabled the end-device should be static
@@ -108,12 +101,22 @@
 /*!
  * User application data buffer size
  */
-#define LORAWAN_APP_DATA_BUFF_SIZE                  123
+#define LORAWAN_APP_DATA_BUFF_SIZE                  115
 
 /*!
  * ID of the device on the server front applications
  */
 #define TOKEN_DEVICE								776522
+
+/*!
+ * Number of Sensors readings before send
+ */
+#define READ_NUMBER									5
+
+/*!
+ * Seconds on sleep
+ */
+#define SLEEP_DUTYCYCLE                             8000
 
 
 
@@ -149,7 +152,7 @@ static void LoraStartTx(TxEventType_t EventType);
 static void OnTxTimerEvent(void);
 
 /* Tx button callback function */
-static void OnButtonEvent(void);
+static void OnDemandEvent(void);
 
 // --------------------------------
 
@@ -174,7 +177,17 @@ static void Sensors_Average(float times, float avgs[5]);
 /* Build the JSON string with the sensors data inside to send */
 static void Build_JSON_Payload(float avgs[5], char payload[LORAWAN_APP_DATA_BUFF_SIZE]);
 
+/* Make the copy of one array to the other */
 static void AverageCopy(float avg_out[5], float avg_in[5]);
+
+/* Infinite cycle that waits for the usrbutton to be pressed */
+static void WaitUserButton(void);
+
+/* Main sensor-read and data-send routine (callback to wake-up) */
+static void Main_Routine(void);
+
+/* Initialize the sleep timer (time specified by SLEEP_DUTYCYCLE) */
+static void Init_Sleep_Timer(void);
 
 
 /* Private variables ---------------------------------------------------------*/
@@ -194,14 +207,8 @@ static LoRaMainCallback_t LoRaMainCallbacks ={ HW_GetBatteryLevel,
 static uint8_t AppLedStateOn = RESET;
                                                
 static TimerEvent_t TxTimer;
+static TimerEvent_t WakeTimer;
 
-#ifdef USE_B_L072Z_LRWAN1
-	/*!
-	 * Timer to handle the application Tx Led to toggle
-	 */
-	static TimerEvent_t TxLedTimer;
-	static void OnTimerLedEvent( void );
-#endif
 /* !
  *Initialises the Lora Parameters
  */
@@ -274,6 +281,7 @@ int main(void)
 
 	/* Start a timer to transmit data on LORA network */
 	LoraStartTx(TX_ON_TIMER); //TX_ON_EVENT allows to start LoRa transmission by pressing the USER BUTTON
+	//Init_Sleep_Timer();
 
 	while(1)
 	{
@@ -286,12 +294,44 @@ int main(void)
 	}
 }
 
-static void LORA_HasJoined( void )
+static void WaitUserButton(void)
 {
-	#if( OVER_THE_AIR_ACTIVATION != 0 )
-		PRINTF("JOINED\n\r");
-	#endif
-	LORA_RequestClass( LORAWAN_DEFAULT_CLASS );
+	/* Wait Until User push-button pressed */
+	while(BSP_PB_GetState(BUTTON_KEY) != GPIO_PIN_RESET)
+	{
+	}
+	/* Wait Until User push-button released */
+	while(BSP_PB_GetState(BUTTON_KEY) != GPIO_PIN_SET)
+	{
+	}
+}
+
+static void Main_Routine(void)
+{
+	LoRaTxDone=0;
+	read_counter=0;
+	/*while(read_counter<READ_NUMBER)
+	{
+		PRINTF("Prova\n\r");
+		read_counter++;
+		Read_Sensors();/*
+		if(Read_Sensors())
+		{
+			Sum_Readings();
+			//Print_Sensors();
+		}
+		else PRINTF("Error in reading!");*/
+	//}
+	OnDemandEvent();
+	TimerStart(&WakeTimer); //WakeTimer sarebbe da far ripartire in sx1276.h
+}
+
+static void Init_Sleep_Timer(void)
+{
+	TimerInit(&WakeTimer, Main_Routine);
+	TimerSetValue(&WakeTimer, SLEEP_DUTYCYCLE);
+	Main_Routine();
+	//TimerStart(&WakeTimer);
 }
 
 static void Init_Sensors(void)
@@ -429,17 +469,9 @@ static void Send(char message[LORAWAN_APP_DATA_BUFF_SIZE])
 {
 	if(LORA_JoinStatus()!=LORA_SET)
 	{
-		/*Not joined, try again later*/
+		PRINTF("Not Joined, try again later..\n\r");
 		return;
 	}
-	//PRINTF("SEND REQUEST\n\r");
-	#ifdef USE_B_L072Z_LRWAN1
-		TimerInit( &TxLedTimer, OnTimerLedEvent );
-		TimerSetValue(  &TxLedTimer, 200);
-		LED_On( LED_RED1 ) ;
-		TimerStart( &TxLedTimer );
-	#endif
-
 	AppData.Port = LORAWAN_APP_PORT;
 	memcpy(AppData.Buff, message, strlen(message)+1);
 	AppData.BuffSize = strlen(message)+1;
@@ -472,6 +504,35 @@ static void Build_JSON_Payload(float avgs[5], char payload[LORAWAN_APP_DATA_BUFF
 	sprintf(payload, "%s%s%s%s%s%s%c", head, temp_pl, pres_pl, hum_pl, gas_pl, lux_pl, tail); //TOTAL
 }
 
+static void OnDemandEvent(void)
+{
+	float values[5];
+	char payload[LORAWAN_APP_DATA_BUFF_SIZE] = "";
+
+	Sensors_Average((float)read_counter, values);
+	pres_sum = 0.0;
+	temp_sum = 0.0;
+	hum_sum = 0.0;
+	gas_sum = 0;
+	lux_sum = 0;
+	read_counter = 0;
+
+	if(ft_send==true)
+	{
+		sprintf(payload, "{\"D\":\"%d\"}", TOKEN_DEVICE);
+		ft_send = false;
+	}
+	else Build_JSON_Payload(values, payload);
+	//sprintf(payload, "{\"D\":\"776522\",\"T\":\"20.1\",\"p\":\"0.975\",\"h\":\"100.00\",\"g\":\"111111\",\"l\":\"11111111\"}");
+
+
+	Send(payload);
+
+	PRINTF(payload);
+	PRINTF("\n\r");
+	//Send("{\"D\":\"776522\",\"T\":\"20.1\",\"p\":\"0.975\",\"h\":\"100.00\",\"g\":\"111111\",\"l\":\"11111111\"}");
+}
+
 static void OnTxTimerEvent(void)
 {
 	float values[5];
@@ -491,36 +552,19 @@ static void OnTxTimerEvent(void)
 		ft_send = false;
 	}
 	else Build_JSON_Payload(values, payload);
-	Send(payload);
 
-	//PRINTF(payload);
-	//PRINTF("\n\r");
-	//Send("{\"D\":\"776522\",\"T\":\"20.1\",\"p\":\"0.975\",\"h\":\"100.00\",\"g\":\"111111\",\"l\":\"11111111\"}");
-
-	/*Wait for next tx slot*/
-	TimerStart(&TxTimer);
-}
-
-static void OnButtonEvent(void)
-{
-	float values[5];
-	char payload[LORAWAN_APP_DATA_BUFF_SIZE] = "";
-
-	Sensors_Average((float)read_counter, values);
-	pres_sum = 0.0;
-	temp_sum = 0.0;
-	hum_sum = 0.0;
-	gas_sum = 0;
-	lux_sum = 0;
-	read_counter = 0;
-
-	Build_JSON_Payload(values, payload);
 	Send(payload);
 
 	PRINTF(payload);
 	PRINTF("\n\r");
 	//Send("{\"D\":\"776522\",\"T\":\"20.1\",\"p\":\"0.975\",\"h\":\"100.00\",\"g\":\"111111\",\"l\":\"11111111\"}");
+
+	/*Wait for next tx slot*/
+	TimerStart(&TxTimer);
+
 }
+
+// --------------------------------------------------------------------
 
 static void LoraStartTx(TxEventType_t EventType)
 {
@@ -539,8 +583,16 @@ static void LoraStartTx(TxEventType_t EventType)
 		initStruct.Pull = GPIO_PULLUP;
 		initStruct.Speed = GPIO_SPEED_HIGH;
 		HW_GPIO_Init(USER_BUTTON_GPIO_PORT, USER_BUTTON_PIN, &initStruct);
-		HW_GPIO_SetIrq(USER_BUTTON_GPIO_PORT, USER_BUTTON_PIN, 0, OnButtonEvent);
+		HW_GPIO_SetIrq(USER_BUTTON_GPIO_PORT, USER_BUTTON_PIN, 0, OnDemandEvent);
 	}
+}
+
+static void LORA_HasJoined( void )
+{
+	#if( OVER_THE_AIR_ACTIVATION != 0 )
+		PRINTF("JOINED\n\r");
+	#endif
+	LORA_RequestClass( LORAWAN_DEFAULT_CLASS );
 }
 
 static void LORA_RxData( lora_AppData_t *AppData )
@@ -641,12 +693,4 @@ void _Error_Handler(char *file, int line)
 	}
 	/* USER CODE END Error_Handler_Debug */
 }
-
-
-#ifdef USE_B_L072Z_LRWAN1
-static void OnTimerLedEvent( void )
-{
-	LED_Off(LED_RED1);
-}
-#endif
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

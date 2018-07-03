@@ -64,7 +64,12 @@ Projects/End_Node/main.o: \
  /Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Drivers/CMSIS/Device/ST/STM32L0xx/Include/stm32l072xx.h \
  /Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Projects/Multi/Applications/LoRa/End_Node/inc/hw_gpio.h \
  /Users/dk8moore/Desktop/embedded-project/External\ Libraries/bmp280.h \
- /Users/dk8moore/Desktop/embedded-project/External\ Libraries/tsl2561.h
+ /Users/dk8moore/Desktop/embedded-project/External\ Libraries/tsl2561.h \
+ /Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Middlewares/Third_Party/Lora/Utilities/delay.h \
+ /Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Drivers/BSP/Components/sx1276/sx1276.h \
+ /Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Drivers/BSP/Components/sx1276/sx1276Regs-Fsk.h \
+ /Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Drivers/BSP/Components/sx1276/sx1276Regs-LoRa.h \
+ /Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Middlewares/Third_Party/Lora/Phy/radio.h
 
 /Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Projects/Multi/Applications/LoRa/End_Node/inc/hw.h:
 
@@ -195,3 +200,13 @@ Projects/End_Node/main.o: \
 /Users/dk8moore/Desktop/embedded-project/External\ Libraries/bmp280.h:
 
 /Users/dk8moore/Desktop/embedded-project/External\ Libraries/tsl2561.h:
+
+/Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Middlewares/Third_Party/Lora/Utilities/delay.h:
+
+/Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Drivers/BSP/Components/sx1276/sx1276.h:
+
+/Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Drivers/BSP/Components/sx1276/sx1276Regs-Fsk.h:
+
+/Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Drivers/BSP/Components/sx1276/sx1276Regs-LoRa.h:
+
+/Users/dk8moore/Desktop/embedded-project/STM32CubeExpansion_LRWAN_V1.1.4/Middlewares/Third_Party/Lora/Phy/radio.h:
