@@ -111,12 +111,12 @@
 /*!
  * Number of Sensors readings before send
  */
-#define READ_NUMBER									20
+#define READ_NUMBER									50
 
 /*!
  * Seconds on sleep
  */
-#define SLEEP_DUTYCYCLE                             20000
+#define SLEEP_DUTYCYCLE                             12000
 
 
 
@@ -290,6 +290,14 @@ int main(void)
 			LPM_EnterLowPower();
 		} else DelayMs(100);
 
+		/*
+		if(Read_Sensors())
+		{
+			Sum_Readings();
+			//Print_Sensors();
+		}
+		else PRINTF("Error in reading!");
+		*/
 	}
 }
 
@@ -387,23 +395,22 @@ static void Init_Sensors(void)
 
 static bool Read_Sensors(void)
 {
+	gas = getAnalogSensorValue(2); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN2)
 	// SENSORS READING OPERATIONS
 	/* ENVIRONMENTAL SENSOR BMx280 READ OPERATIONS */
+	HAL_Delay(100);
 	if(!bmp280_read_float(&bmp280, &temp, &pres, &hum)) {  //uses bmp280.h
 		PRINTF("BMx280 reading failed!\n\r");
 		return false;
 	}
 	pres = Pa_to_Bar(pres);
-
-	HAL_Delay(150);
+	HAL_Delay(100);
 	if(!tsl2561_read_intensity(&tsl2561, &lux)) {	//uses tsl2561.h
 		PRINTF("TSL2561 reading failed!\n\r");
 		return false;
 	}
+	HAL_Delay(100);
 	return true;
-	//HAL_Delay(150);
-	//gas = getAnalogSensorValue(0); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN0)
-	HAL_Delay(150);
 }
 
 static void Sum_Readings(void)
@@ -571,7 +578,7 @@ static void OnTxTimerEvent(void)
 	//Send("{\"D\":\"776522\",\"T\":\"20.1\",\"p\":\"0.975\",\"h\":\"100.00\",\"g\":\"111111\",\"l\":\"11111111\"}");
 
 	/*Wait for next tx slot*/
-	TimerStart(&WakeTimer);
+	TimerStart(&TxTimer);
 
 }
 
