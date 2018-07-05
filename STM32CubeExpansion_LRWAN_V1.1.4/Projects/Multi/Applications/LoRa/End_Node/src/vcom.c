@@ -80,7 +80,7 @@ void vcom_Init(void)
       - Hardware flow control disabled (RTS and CTS signals) */
   UartHandle.Instance        = USARTX;
   
-  UartHandle.Init.BaudRate   = 115200;
+  UartHandle.Init.BaudRate   = 9600; //115200
   UartHandle.Init.WordLength = UART_WORDLENGTH_8B;
   UartHandle.Init.StopBits   = UART_STOPBITS_1;
   UartHandle.Init.Parity     = UART_PARITY_NONE;

@@ -1658,6 +1658,7 @@ void SX1276OnDio0Irq( void )
                 {
                     RadioEvents->TxDone( );
                     PRINTF( "txDone\n\r" );
+                    HAL_GPIO_WritePin(RADIO_TCXO_VCC_PORT, RADIO_TCXO_VCC_PIN, GPIO_PIN_RESET);
                     LoRaTxDone = 1;
                     //SX1276Reset( );
 

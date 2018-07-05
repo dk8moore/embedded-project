@@ -80,7 +80,7 @@
  * LoRaWAN Default data Rate Data Rate
  * @note Please note that LORAWAN_DEFAULT_DATA_RATE is used only when ADR is disabled 
  */
-#define LORAWAN_DEFAULT_DATA_RATE 					DR_3 //DR_5 near transmission
+#define LORAWAN_DEFAULT_DATA_RATE 					DR_0 //DR_5 near transmission
 /*!
  * LoRaWAN application port
  * @note do not use 224. It is reserved for certification
@@ -101,22 +101,22 @@
 /*!
  * User application data buffer size
  */
-#define LORAWAN_APP_DATA_BUFF_SIZE                  115
+#define LORAWAN_APP_DATA_BUFF_SIZE                  59 // max payload size allowed by DR_0
 
 /*!
  * ID of the device on the server front applications
  */
-#define TOKEN_DEVICE								776522
+#define TOKEN_DEVICE								776522  //Not useful, added on server
 
 /*!
  * Number of Sensors readings before send
  */
-#define READ_NUMBER									50
+#define READ_NUMBER									15 //15
 
 /*!
  * Seconds on sleep
  */
-#define SLEEP_DUTYCYCLE                             12000
+#define SLEEP_DUTYCYCLE                             7000 //60
 
 
 
@@ -273,9 +273,6 @@ int main(void)
 	LORA_Init(&LoRaMainCallbacks, &LoRaParamInit);
 	PRINTF("VERSION: %X\n\r", VERSION);
 
-	/* Join the LORA network */
-	LORA_Join();
-
 	/* Initialise the sensors connected */
 	Init_Sensors();
 
@@ -285,11 +282,12 @@ int main(void)
 
 	while(1)
 	{
+		DISABLE_IRQ();
 		if(LoRaTxDone==1)
 		{
 			LPM_EnterLowPower();
-		} else DelayMs(100);
-
+		} else DelayMs(10);
+		ENABLE_IRQ();
 		/*
 		if(Read_Sensors())
 		{
@@ -395,7 +393,7 @@ static void Init_Sensors(void)
 
 static bool Read_Sensors(void)
 {
-	gas = getAnalogSensorValue(2); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN2)
+	gas = getAnalogSensorValue(5); //uses adc.h -> initialize Adc then read Adc value then de-init Adc (on pin ADC_IN5)
 	// SENSORS READING OPERATIONS
 	/* ENVIRONMENTAL SENSOR BMx280 READ OPERATIONS */
 	HAL_Delay(100);
@@ -477,11 +475,15 @@ static void AverageCopy(float avg_out[5], float avg_in[5])
 
 static void Send(char message[LORAWAN_APP_DATA_BUFF_SIZE])
 {
+	/* Join the LORA network */
+	LORA_Join();
+
 	if(LORA_JoinStatus()!=LORA_SET)
 	{
 		PRINTF("Not Joined, try again later..\n\r");
 		return;
 	}
+	HAL_GPIO_WritePin(RADIO_TCXO_VCC_PORT, RADIO_TCXO_VCC_PIN, GPIO_PIN_SET);
 	AppData.Port = LORAWAN_APP_PORT;
 	memcpy(AppData.Buff, message, strlen(message)+1);
 	AppData.BuffSize = strlen(message)+1;
@@ -490,16 +492,17 @@ static void Send(char message[LORAWAN_APP_DATA_BUFF_SIZE])
 
 static void Build_JSON_Payload(float avgs[5], char payload[LORAWAN_APP_DATA_BUFF_SIZE])
 {
-	char head[17];
-	sprintf(head, "{\"D\":\"%d\"", TOKEN_DEVICE);
-	char temp_pl[16] = "";
-	char pres_pl[16] = "";
-	char hum_pl[17] = "";
-	char gas_pl[17] = "";
-	char lux_pl[18] = "";
+	//char head[1];
+	//sprintf(head, "{\"D\":\"%d\"", TOKEN_DEVICE); //si può togliere aggiungendolo lato server -> risparmio 16
+	char head = '{';
+	char temp_pl[9] = ""; //16
+	char pres_pl[10] = ""; //17
+	char hum_pl[12] = ""; //17
+	char gas_pl[11] = ""; //17
+	char lux_pl[12] = ""; //18
 	char tail = '}';
 
-	// INCREMENTAL SENDING -> BETA
+	// INCREMENTAL SENDING -> BETA -> a double send needs to be implemented
 	/*
 	if(past_avgs[0]!=avgs[0])
 		sprintf(temp_pl, ",\"T\":\"%.1f\"", avgs[0]);
@@ -512,17 +515,25 @@ static void Build_JSON_Payload(float avgs[5], char payload[LORAWAN_APP_DATA_BUFF
 	if((int)past_avgs[4]!=(int)avgs[4])
 		sprintf(lux_pl, ",\"l\":\"%d\"", (int)avgs[4]);
 
+	AverageCopy(past_avgs, avgs);
 	 */
-	//AverageCopy(past_avgs, avgs);
 
 	// FULL PAYLOAD ALWAYS
+	/*
 	sprintf(temp_pl, ",\"T\":\"%.1f\"", avgs[0]);
 	sprintf(pres_pl, ",\"p\":\"%.3f\"", avgs[1]);
 	sprintf(hum_pl, ",\"h\":\"%.2f\"", avgs[2]);
 	sprintf(gas_pl, ",\"g\":\"%d\"", (int)avgs[3]);
 	sprintf(lux_pl, ",\"l\":\"%d\"", (int)avgs[4]);
+	*/
+	// Tolgo l'invio dei dati in stringa -> risparmio 20
+	sprintf(temp_pl, "\"T\":%d", (int)(avgs[0]*10));
+	sprintf(pres_pl, ",\"p\":%d", (int)(avgs[1]*1000));
+	sprintf(hum_pl, ",\"h\":%d", (int)(avgs[2]*100));
+	sprintf(gas_pl, ",\"g\":%d", (int)avgs[3]);
+	sprintf(lux_pl, ",\"l\":%d", (int)avgs[4]);
 
-	sprintf(payload, "%s%s%s%s%s%s%c", head, temp_pl, pres_pl, hum_pl, gas_pl, lux_pl, tail); //TOTAL
+	sprintf(payload, "%c%s%s%s%s%s%c", head, temp_pl, pres_pl, hum_pl, gas_pl, lux_pl, tail); //TOTAL
 }
 
 static void OnDemandEvent(void)
@@ -532,7 +543,7 @@ static void OnDemandEvent(void)
 
 	if(ft_send==true)
 	{
-		sprintf(payload, "{\"D\":\"%d\"}", TOKEN_DEVICE);
+		sprintf(payload, "{\"D\":%d}", TOKEN_DEVICE);
 		ft_send = false;
 	}
 	else
@@ -547,8 +558,8 @@ static void OnDemandEvent(void)
 		Build_JSON_Payload(values, payload);
 	}
 	Send(payload);
-	//PRINTF(payload);
-	//PRINTF("\n\r");
+	PRINTF(payload);
+	PRINTF("\n\r");
 }
 
 static void OnTxTimerEvent(void)
@@ -568,6 +579,7 @@ static void OnTxTimerEvent(void)
 	{
 		sprintf(payload, "{\"D\":\"%d\"}", TOKEN_DEVICE);
 		ft_send = false;
+
 	}
 	else Build_JSON_Payload(values, payload);
 
@@ -576,6 +588,7 @@ static void OnTxTimerEvent(void)
 	PRINTF(payload);
 	PRINTF("\n\r");
 	//Send("{\"D\":\"776522\",\"T\":\"20.1\",\"p\":\"0.975\",\"h\":\"100.00\",\"g\":\"111111\",\"l\":\"11111111\"}");
+	//PRINTF("{\"T\":999,\"p\":999,\"h\":99999,\"g\":9999,\"l\":99999}"); //max must be 59
 
 	/*Wait for next tx slot*/
 	TimerStart(&TxTimer);
